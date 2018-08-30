@@ -58,12 +58,14 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     require(messages.nonEmpty)
     val pid = messages.head.persistenceId
     val inserts: im.Seq[(String, JsonObject)] = messages.map(aw => {
-      val serialized: im.Seq[JsonObject] = aw.payload.map { msg =>
 
+      var allTags = Set.empty[String]
+      val serialized: im.Seq[JsonObject] = aw.payload.map { msg =>
         val (event, tags) = msg.payload match {
           case t: Tagged => (t.payload.asInstanceOf[AnyRef], t.tags)
           case other => (other.asInstanceOf[AnyRef], Set.empty)
         }
+        allTags = allTags ++ tags
         val m = JsonObject.create()
         val serializer = serialization.findSerializerFor(event)
         val serManifest = Serializers.manifestFor(serializer, event)
@@ -73,7 +75,9 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         val bytes: String = Base64.getEncoder.encodeToString(serialization.serialize(event).get) // TODO deal with failure
         m.put("payload", bytes)
         m.put("tags", JsonArray.from(tags.toList.asJava))
+        m.put("sequence_nr", msg.sequenceNr)
       }
+
       val insert: JsonObject = JsonObject.create()
         .put("type", "journal_message")
         // assumed all msgs have the same writerUuid
@@ -82,7 +86,8 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         .put("sequence_from", aw.lowestSequenceNr)
         .put("sequence_to", aw.highestSequenceNr)
         .put("messages", JsonArray.from(serialized.asJava))
-      (s"$pid-${aw.lowestSequenceNr}-${aw.highestSequenceNr}", insert)
+        .put("all_tags", JsonArray.from(allTags.toList.asJava))
+      (s"$pid-${aw.lowestSequenceNr}", insert)
     })
 
     val huh = inserts.map(jo => {

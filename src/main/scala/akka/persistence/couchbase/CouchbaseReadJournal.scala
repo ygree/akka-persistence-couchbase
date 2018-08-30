@@ -2,21 +2,17 @@ package akka.persistence.couchbase
 
 import akka.NotUsed
 import akka.actor.ExtendedActorSystem
-import akka.persistence.couchbase.internal.CouchbaseQueryStage
 import akka.persistence.query.scaladsl._
 import akka.persistence.query.{EventEnvelope, Offset}
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.CouchbaseCluster
-import com.couchbase.client.java.query.N1qlQuery
-import com.typesafe.config.Config
-import rx.{Observable, RxReactiveStreams}
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
-import com.couchbase.client.java.query.dsl.functions._
-import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
 import com.couchbase.client.java.query.dsl.Expression._
-import com.couchbase.client.java.query.dsl.Sort._
+import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
+import com.typesafe.config.Config
 import org.reactivestreams.Publisher
+import rx.{Observable, RxReactiveStreams}
 
 object CouchbaseReadJournal {
   final val Identifier = "akka.persistence.couchbase.query"
@@ -155,6 +151,6 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
 
     */
   override def persistenceIds(): Source[String, NotUsed] = {
-   ???
+    ???
   }
 }
