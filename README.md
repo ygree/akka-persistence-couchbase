@@ -13,7 +13,13 @@ Then go to: `http://localhost:8091` and create a bucket called `akka`
 
 Index:
 
+For recovery and events by persistenceId:
 ```
-CREATE INDEX `pi2` ON `akka`((self.`persistenceId`),(self.`sequence_from`))
+CREATE INDEX `recovery` ON `akka`((`persistenceId`),(`sequence_from`))
+```
+
+For events by tag:
+```
+CREATE INDEX `tags` ON `akka`((all (`all_tags`)),`ordering`)
 ```
 

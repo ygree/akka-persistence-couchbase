@@ -2,17 +2,24 @@ package akka.persistence.couchbase
 
 import akka.NotUsed
 import akka.actor.ExtendedActorSystem
+import akka.persistence.couchbase.CouchbaseJournal.{Fields, TaggedPersistentRepr, deserialize, extractTaggedEvent}
 import akka.persistence.query.scaladsl._
-import akka.persistence.query.{EventEnvelope, Offset}
+import akka.persistence.query._
+import akka.serialization.{Serialization, SerializationExtension}
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.CouchbaseCluster
+import com.couchbase.client.java.document.json.JsonArray
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
+import com.couchbase.client.java.query.dsl.path.GroupByPath
 import com.typesafe.config.Config
 import org.reactivestreams.Publisher
 import rx.{Observable, RxReactiveStreams}
+
+import scala.collection.JavaConverters._
+import scala.collection.immutable
 
 object CouchbaseReadJournal {
   final val Identifier = "akka.persistence.couchbase.query"
@@ -34,6 +41,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
   with PersistenceIdsQuery {
 
 
+  private val serialization: Serialization = SerializationExtension(as)
   // TODO config
   private val settings = CouchbaseSettings(config)
   // FIXME, hosts from config
@@ -51,9 +59,42 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     ???
   }
 
+  /*
+  Messages persisted together with PersistAll have the same Offset
+
+   CREATE INDEX `tags` ON `akka`((all (`all_tags`)),`ordering`)
+   */
   override def currentEventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] = {
-    // I am currently working out the best type of index for this
-    ???
+    // TODO, include offset and workout index
+    val query = offset match {
+      case NoOffset =>
+        N1qlQuery.parameterized(
+          """select * FROM akka
+            |WHERE ANY tag IN akka.all_tags SATISFIES tag = $1 END
+            |ORDER BY ordering""".stripMargin, JsonArray.from(tag))
+
+      case Sequence(o) =>
+        N1qlQuery.parameterized(
+          """select * FROM akka
+            |WHERE ANY tag IN akka.all_tags SATISFIES tag = $1 END
+            |AND ordering >= $2
+            |ORDER BY ordering""".stripMargin, JsonArray.from(o, tag))
+
+      case TimeBasedUUID(_) =>
+        throw new IllegalArgumentException("TimeBasedUUIDs are not supported")
+    }
+
+    n1qlQuery(query).map((row: AsyncN1qlQueryRow) => {
+      val deserialized: immutable.Seq[TaggedPersistentRepr] = deserialize(row, Long.MaxValue, serialization, extractTaggedEvent).filter(_.tags.contains(tag))
+      val ordering = row.value().getLong(Fields.Ordering)
+      deserialized.map(tpr => EventEnvelope(
+        Offset.sequence(ordering), // FIXME, this won't work as
+        tpr.pr.persistenceId,
+        tpr.pr.sequenceNr,
+        tpr.pr.payload
+      ))
+    }).mapConcat(identity)
+
   }
 
   /**
@@ -63,15 +104,20 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
 
     // this type works on the current queries we'd need to create a stage
     // to do the live queries
-
     // this can fail as it relies on async updates to the index.
-    val query = select(distinct("persistenceId")).from("akka").where(x("persistenceId").isNotNull)
-    val rows: Observable[AsyncN1qlQueryRow] = bucket.query(query).flatMap(results => results.rows())
-    // FIXME, deal with initial query failure .errors()
-    val publisher: Publisher[AsyncN1qlQueryRow] = RxReactiveStreams.toPublisher(rows)
-    val source: Source[AsyncN1qlQueryRow, NotUsed] = Source.fromPublisher(publisher)
+    val query = select(distinct(Fields.PersistenceId)).from("akka").where(x(Fields.PersistenceId).isNotNull)
+    n1qlQuery(query).map(row => row.value().getString(Fields.PersistenceId))
+  }
 
-    source.map(row => row.value().getString("persistenceId"))
+  private def n1qlQuery(query: N1qlQuery): Source[AsyncN1qlQueryRow, NotUsed] = {
+    Source.fromPublisher(RxReactiveStreams.toPublisher(
+      bucket.query(query).flatMap(results => results.rows()))
+    )
+  }
+  private def n1qlQuery(query: Statement): Source[AsyncN1qlQueryRow, NotUsed] = {
+    Source.fromPublisher(RxReactiveStreams.toPublisher(
+      bucket.query(query).flatMap(results => results.rows()))
+    )
   }
 
   /*

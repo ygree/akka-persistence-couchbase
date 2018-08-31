@@ -31,23 +31,23 @@ class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournal
   implicit val mat = ActorMaterializer()
 
 
-    "currentPersistenceIds" must {
-      "work" in {
+  "currentPersistenceIds" must {
+    "work" in {
 
-        val pa1 = system.actorOf(TestActor.props("p1"))
-        pa1 ! "p1-evt-1"
-        expectMsg("p1-evt-1-done")
-        val pa2 = system.actorOf(TestActor.props("p2"))
-        pa2 ! "p2-evt-1"
-        expectMsg("p2-evt-1-done")
+      val pa1 = system.actorOf(TestActor.props("p1"))
+      pa1 ! "p1-evt-1"
+      expectMsg("p1-evt-1-done")
+      val pa2 = system.actorOf(TestActor.props("p2"))
+      pa2 ! "p2-evt-1"
+      expectMsg("p2-evt-1-done")
 
-        val probe: TestSubscriber.Probe[String] = queries.currentPersistenceIds().runWith(TestSink.probe)
+      val probe: TestSubscriber.Probe[String] = queries.currentPersistenceIds().runWith(TestSink.probe)
 
-        probe.requestNext("p1")
-        probe.requestNext("p2")
-        probe.expectComplete()
+      probe.requestNext("p1")
+      probe.requestNext("p2")
+      probe.expectComplete()
 
-      }
+    }
   }
 
   "currentEventsByTag" must {
@@ -58,35 +58,33 @@ class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournal
       expectMsg(20.seconds, s"hello-done")
       a ! TestActor.PersistAll(List("a green apple", "a black car"))
       expectMsg(s"PersistAll-done")
-//      expectMsg(s"something else-done")
-//      a ! "a green banana"
-//      expectMsg(s"a green banana-done")
-//      b ! "a green leaf"
-//      expectMsg(s"a green leaf-done")
+      a ! "a green banana"
+      expectMsg(s"a green banana-done")
+      b ! "a green leaf"
+      expectMsg(s"a green leaf-done")
 
-/*
       val greenSrc = queries.currentEventsByTag(tag = "green", offset = NoOffset)
       val probe = greenSrc.runWith(TestSink.probe[Any])
       probe.request(2)
-      probe.expectNextPF { case e @ EventEnvelope(_, "a", 2L, "a green apple") => e }
-      probe.expectNextPF { case e @ EventEnvelope(_, "a", 4L, "a green banana") => e }
+      probe.expectNextPF { case e@EventEnvelope(_, "a", 2L, "a green apple") => e }
+      probe.expectNextPF { case e@EventEnvelope(_, "a", 4L, "a green banana") => e }
+
       probe.expectNoMessage(500.millis)
       probe.request(2)
-      probe.expectNextPF { case e @ EventEnvelope(_, "b", 2L, "a green leaf") => e }
+      probe.expectNextPF { case e@EventEnvelope(_, "b", 1L, "a green leaf") => e }
       probe.expectComplete()
 
       val blackSrc = queries.currentEventsByTag(tag = "black", offset = NoOffset)
       val probe2 = blackSrc.runWith(TestSink.probe[Any])
       probe2.request(5)
-      probe2.expectNextPF { case e @ EventEnvelope(_, "b", 1L, "a black car") => e }
+      probe2.expectNextPF { case e@EventEnvelope(_, "a", 3L, "a black car") => e }
       probe2.expectComplete()
 
       val appleSrc = queries.currentEventsByTag(tag = "apple", offset = NoOffset)
       val probe3 = appleSrc.runWith(TestSink.probe[Any])
       probe3.request(5)
-      probe3.expectNextPF { case e @ EventEnvelope(_, "a", 2L, "a green apple") => e }
+      probe3.expectNextPF { case e@EventEnvelope(_, "a", 2L, "a green apple") => e }
       probe3.expectComplete()
-      */
     }
 
   }

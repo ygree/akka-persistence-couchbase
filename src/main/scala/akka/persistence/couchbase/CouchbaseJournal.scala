@@ -3,17 +3,16 @@ package akka.persistence.couchbase
 import akka.event.Logging
 import akka.persistence.journal.{AsyncWriteJournal, Tagged}
 import akka.persistence.{AtomicWrite, PersistentRepr}
-import akka.serialization.{SerializationExtension, Serializers}
-import com.couchbase.client.java.document.JsonDocument
+import akka.serialization.{Serialization, SerializationExtension, Serializers}
+import com.couchbase.client.java.document.{JsonDocument, JsonLongDocument}
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.Sort._
-import com.couchbase.client.java.{AsyncBucket, Cluster, CouchbaseCluster}
+import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster, CouchbaseCluster}
 import com.typesafe.config.Config
-import rx.functions.{Action0, Action1}
 import rx.{Observable, Subscriber}
 
 import scala.collection.JavaConverters._
@@ -21,7 +20,67 @@ import scala.collection.{immutable => im}
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.Try
 import java.util.Base64
-import java.nio.charset.StandardCharsets
+
+import akka.persistence.couchbase.CouchbaseJournal.Fields
+
+object CouchbaseJournal {
+
+  case class TaggedPersistentRepr(pr: PersistentRepr, tags: Set[String])
+
+  def deserialize[T](row: AsyncN1qlQueryRow, toSequenceNr: Long, serialization: Serialization,
+                     extract: (String, String, JsonObject, Serialization) => T): im.Seq[T] = {
+    val value = row.value().getObject("akka")
+    val persistenceId = value.getString(Fields.PersistenceId)
+    val from: Long = value.getLong(Fields.SequenceFrom)
+    val sequenceTo: Long = value.getLong(Fields.SequenceTo)
+    val localTo: Long = if (sequenceTo > toSequenceNr) toSequenceNr else sequenceTo
+    val events: JsonArray = value.getArray("messages")
+    val writerUuid = value.getString("writer_uuid")
+    require(sequenceTo - from + 1 == events.size())
+    val nrReply = localTo - from
+    (0 to nrReply.asInstanceOf[Int]) map { i =>
+      extract(persistenceId, writerUuid, events.getObject(i), serialization)
+    }
+  }
+
+  def extractEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization): PersistentRepr = {
+    val serManifest = event.getString("manifest")
+    val serId = event.getInt("id")
+    val bytes = Base64.getDecoder.decode(event.getString("payload"))
+    val payload = serialization.deserialize(bytes, serId, serManifest).get // hrmm
+    val sequenceNr = event.getLong(Fields.SequenceNr)
+    PersistentRepr(
+      payload = payload,
+      sequenceNr = sequenceNr,
+      persistenceId = pid,
+      writerUuid = writerUuid
+    )
+  }
+
+  def extractTaggedEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization): TaggedPersistentRepr = {
+    val serManifest = event.getString("manifest")
+    val serId = event.getInt("id")
+    val bytes = Base64.getDecoder.decode(event.getString("payload"))
+    val payload = serialization.deserialize(bytes, serId, serManifest).get // hrmm
+    val sequenceNr = event.getLong(Fields.SequenceNr)
+    val tags: Set[AnyRef] = event.getArray("tags").toList.asScala.toSet
+    CouchbaseJournal.TaggedPersistentRepr(PersistentRepr(
+      payload = payload,
+      sequenceNr = sequenceNr,
+      persistenceId = pid,
+      writerUuid = writerUuid
+    ), tags.map(_.toString))
+  }
+
+  object Fields {
+    val PersistenceId = "persistence_id"
+    val SequenceNr = "sequence_nr"
+    val SequenceFrom = "sequence_from"
+    val SequenceTo = "sequence_to"
+    val Ordering = "ordering"
+  }
+
+}
 
 /*
 
@@ -34,8 +93,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
   private implicit val ec: ExecutionContext = context.dispatcher
 
   private val log = Logging(this)
-
-  val serialization = SerializationExtension(context.system)
+  private val serialization: Serialization = SerializationExtension(context.system)
 
   private val config: CouchbaseSettings = CouchbaseSettings(c)
 
@@ -46,8 +104,8 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     c
   }
 
-  val bucket: AsyncBucket = cluster.openBucket(config.bucket).async()
-
+  val bucket: Bucket = cluster.openBucket(config.bucket)
+  val asyncBucket: AsyncBucket = cluster.openBucket(config.bucket).async()
 
   override def postStop(): Unit = {
     cluster.disconnect()
@@ -58,7 +116,6 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     require(messages.nonEmpty)
     val pid = messages.head.persistenceId
     val inserts: im.Seq[(String, JsonObject)] = messages.map(aw => {
-
       var allTags = Set.empty[String]
       val serialized: im.Seq[JsonObject] = aw.payload.map { msg =>
         val (event, tags) = msg.payload match {
@@ -75,34 +132,40 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         val bytes: String = Base64.getEncoder.encodeToString(serialization.serialize(event).get) // TODO deal with failure
         m.put("payload", bytes)
         m.put("tags", JsonArray.from(tags.toList.asJava))
-        m.put("sequence_nr", msg.sequenceNr)
+        m.put(Fields.SequenceNr, msg.sequenceNr)
       }
 
       val insert: JsonObject = JsonObject.create()
         .put("type", "journal_message")
         // assumed all msgs have the same writerUuid
         .put("writer_uuid", aw.payload.head.writerUuid.toString)
-        .put("persistenceId", pid)
-        .put("sequence_from", aw.lowestSequenceNr)
-        .put("sequence_to", aw.highestSequenceNr)
+        .put(Fields.PersistenceId, pid)
+        .put(Fields.SequenceFrom, aw.lowestSequenceNr)
+        .put(Fields.SequenceTo, aw.highestSequenceNr)
         .put("messages", JsonArray.from(serialized.asJava))
         .put("all_tags", JsonArray.from(allTags.toList.asJava))
       (s"$pid-${aw.lowestSequenceNr}", insert)
     })
 
-    val huh = inserts.map(jo => {
-      val p = Promise[Try[Unit]]()
-      val x: Observable[JsonDocument] = bucket.insert(JsonDocument.create(jo._1, jo._2))
 
-      x.single().subscribe((t: JsonDocument) => (), new Action1[Throwable] {
-        override def call(t: Throwable): Unit = p.failure(t)
-      }, new Action0 {
-        override def call(): Unit = p.complete(Try(Try(())))
+    val result = Future.sequence(inserts.map((jo: (String, JsonObject)) => {
+      val p = Promise[Try[Unit]]()
+      // TODO make persistTo configurable
+      val something: Observable[JsonLongDocument] = asyncBucket.counter("akka", 1, 0)
+
+      val write = something.flatMap(id => {
+        val withId = jo._2.put(Fields.Ordering, id.content())
+        asyncBucket.insert(JsonDocument.create(jo._1, withId))
+      })
+
+
+      write.single().subscribe(new Subscriber[JsonDocument]() {
+        override def onCompleted(): Unit = p.tryComplete(Try(Try(())))
+        override def onError(e: Throwable): Unit = p.tryFailure(e)
+        override def onNext(t: JsonDocument): Unit = ()
       })
       p.future
-    })
-
-    val result = Future.sequence(huh)
+    }))
     result
   }
 
@@ -112,11 +175,11 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     if (toSequenceNr == Long.MaxValue) {
       log.info("Journal cleanup (Long.MaxValue)")
       asyncReadHighestSequenceNr(persistenceId, 0).flatMap { highestSeqNr =>
-        singleObservableToFuture(bucket.upsert(JsonDocument.create(docId, JsonObject.create().put("deleted_to", highestSeqNr))))
+        singleObservableToFuture(asyncBucket.upsert(JsonDocument.create(docId, JsonObject.create().put("deleted_to", highestSeqNr))))
           .map(_ => ())
       }
     } else {
-      singleObservableToFuture(bucket.upsert(JsonDocument.create(docId, JsonObject.create().put("deleted_to", toSequenceNr))))
+      singleObservableToFuture(asyncBucket.upsert(JsonDocument.create(docId, JsonObject.create().put("deleted_to", toSequenceNr))))
         .map(_ => ())
     }
   }
@@ -141,12 +204,10 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     })
     p.future
   }
+
   override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(recoveryCallback: PersistentRepr => Unit): Future[Unit] = {
-
     log.info("asyncReplayMessages {} {} {} {}", persistenceId, fromSequenceNr, toSequenceNr, max)
-
-
-    val deletedTo: Future[Long] = zeroOrOneObservableToFuture(bucket.get(s"$persistenceId-meta"))
+    val deletedTo: Future[Long] = zeroOrOneObservableToFuture(asyncBucket.get(s"$persistenceId-meta"))
       .map {
         case Some(jo: JsonDocument) =>
           val dt = jo.content().getLong("deleted_to").toLong
@@ -155,15 +216,15 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         case None => fromSequenceNr
       }
 
-    val sayWhat: Future[Unit] = deletedTo.flatMap { starting =>
+    val replayFinished: Future[Unit] = deletedTo.flatMap { starting =>
 
       log.info("Starting at sequence_nr {}", starting)
 
       val what = select("*")
         .from("akka")
-        .where(x("akka.persistenceId").eq(x("$1"))
-          .and(x("akka.sequence_from").gte(starting)
-            .and("akka.sequence_from").lte(toSequenceNr)))
+        .where(x(Fields.PersistenceId).eq(x("$1"))
+          .and(x(Fields.SequenceFrom).gte(starting)
+            .and(Fields.SequenceFrom).lte(toSequenceNr)))
 
       log.info("Query: " + what)
 
@@ -175,45 +236,22 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
       }
 
       val query = N1qlQuery.parameterized(what, JsonArray.from(persistenceId))
-
       val done = Promise[Unit]
 
-      limit(bucket.query(query)
+      limit(asyncBucket.query(query)
         .flatMap(result => result.rows()))
         .subscribe(
           new Subscriber[AsyncN1qlQueryRow]() {
             override def onCompleted(): Unit = {
               done.tryComplete(Try(()))
-
             }
-
             override def onError(e: Throwable): Unit = {
               e.printStackTrace(System.out)
               done.tryFailure(e)
             }
-
             override def onNext(row: AsyncN1qlQueryRow): Unit = {
-              val value = row.value().getObject("akka")
-              val from: Long = value.getLong("sequence_from")
-              val sequenceTo: Long = value.getLong("sequence_to")
-              val localTo: Long = if (sequenceTo > toSequenceNr) toSequenceNr else sequenceTo
-              val events: JsonArray = value.getArray("messages")
-              val writerUuid = value.getString("writer_uuid")
-              require(sequenceTo - from + 1 == events.size())
-              val nrReply = localTo - from
-              (0 to nrReply.asInstanceOf[Int]) foreach { i =>
-                val event: JsonObject = events.getObject(i)
-
-                val serManifest = event.getString("manifest")
-                val serId = event.getInt("id")
-                val bytes = Base64.getDecoder.decode(event.getString("payload"))
-                val payload = serialization.deserialize(bytes, serId, serManifest).get // hrmm
-                recoveryCallback(PersistentRepr(
-                  payload = payload,
-                  sequenceNr = from + i,
-                  persistenceId = persistenceId,
-                  writerUuid = writerUuid)
-                )
+              CouchbaseJournal.deserialize(row, toSequenceNr, serialization, CouchbaseJournal.extractEvent).foreach { pr =>
+                recoveryCallback(pr)
               }
             }
           }
@@ -221,8 +259,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
       done.future
     }
 
-
-    sayWhat
+    replayFinished
   }
 
   // TODO how horrific is this query?
@@ -232,11 +269,11 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
 
     val result = Promise[Long]
 
-    val highestSequenceNrStatement = select("sequence_to")
+    val highestSequenceNrStatement = select(Fields.SequenceTo)
       .from("akka")
-      .where(x("akka.persistenceId").eq(x("$1"))
-        .and(x("akka.sequence_from").gte(fromSequenceNr)))
-      .orderBy(desc("akka.sequence_from"))
+      .where(x(Fields.PersistenceId).eq(x("$1"))
+        .and(x(Fields.SequenceFrom).gte(fromSequenceNr)))
+      .orderBy(desc(Fields.SequenceFrom))
       .limit(1)
 
 
@@ -249,7 +286,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
 
     log.info("Executing: {}", highestSequenceNrQuery)
 
-    bucket.query(highestSequenceNrQuery)
+    asyncBucket.query(highestSequenceNrQuery)
       .flatMap(result => result.rows())
       .subscribe(new Subscriber[AsyncN1qlQueryRow]() {
         override def onCompleted(): Unit = {
