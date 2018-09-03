@@ -8,14 +8,13 @@ import akka.persistence.query._
 import akka.serialization.{Serialization, SerializationExtension}
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.CouchbaseCluster
-import com.couchbase.client.java.document.json.JsonArray
+import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
+import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
-import com.couchbase.client.java.query.dsl.path.GroupByPath
 import com.typesafe.config.Config
-import org.reactivestreams.Publisher
 import rx.{Observable, RxReactiveStreams}
 
 import scala.collection.JavaConverters._
@@ -52,11 +51,91 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     cluster.disconnect()
   }
 
-  override def eventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] = ???
-  override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] = ???
+  private val eventsByTagQuery =
+    """select * FROM akka
+      |WHERE ANY tag IN akka.all_tags SATISFIES tag = $tag END
+      |AND ordering >= $ordering
+      |ORDER BY ordering""".stripMargin
+
+  override def eventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] = {
+    val initialOrdering: Long = offset match {
+      case NoOffset => 0L
+      case Sequence(o) => o
+      case TimeBasedUUID(_) => throw new IllegalArgumentException("Couchbase Journal does not support Timeuuid offsets")
+    }
+
+    val params: JsonObject = JsonObject.create().put("tag", tag)
+    val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+
+    eventsByTagSource(Source.fromGraph(new LiveN1qlQueryStage[Long](
+      N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, initialOrdering), queryParams),
+      params, bucket, initialOrdering,
+      ordering => Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),
+      (_, row) => row.value().getObject("akka").getLong(Fields.Ordering) + 1
+    )).mapMaterializedValue(_ => NotUsed), tag)
+  }
+
+  private val eventsByPersistenceId =
+    """
+      |select * from akka
+      |where persistence_id = $pid
+      |and sequence_from  >= $from
+      |and sequence_from <= $to
+      |order by sequence_from
+    """.stripMargin
+
+
+  case class EventsByPersistenceIdState(from: Long, to: Long)
+
+  // FIXME, filter out messages based on toSerquenceNr when they have been saved into a batch
+  override def eventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] = {
+    val params: JsonObject = JsonObject.create()
+      .put("pid", persistenceId)
+      .put("to", toSequenceNr)
+
+    val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+    // TODO do the deleted to query first and start from higher of that and fromSequenceNr
+    val source = Source.fromGraph(new LiveN1qlQueryStage[EventsByPersistenceIdState](
+      N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
+      params,
+      bucket,
+      EventsByPersistenceIdState(fromSequenceNr, 0),
+      state => {
+        if (state.to >= toSequenceNr)
+          None
+        else
+          Some(N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", state.from), queryParams))
+      },
+      (_, row) => EventsByPersistenceIdState(
+        row.value().getObject("akka").getLong(Fields.SequenceFrom) + 1,
+        row.value().getObject("akka").getLong(Fields.SequenceTo)
+      )
+    )).mapMaterializedValue(_ => NotUsed)
+
+    eventsByPersistenceIdSource(source)
+  }
 
   override def currentEventsByPersistenceId(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long): Source[EventEnvelope, NotUsed] = {
-    ???
+    val params: JsonObject = JsonObject.create()
+      .put("pid", persistenceId)
+      .put("to", toSequenceNr)
+
+    val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+    // TODO do the deleted to query first and start from higher of that and fromSequenceNr
+
+    val source = Source.fromGraph(new LiveN1qlQueryStage[EventsByPersistenceIdState](
+      N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
+      params,
+      bucket,
+      EventsByPersistenceIdState(fromSequenceNr, 0),
+      state => None,
+      (_, row) => EventsByPersistenceIdState(
+        row.value().getObject("akka").getLong(Fields.SequenceFrom) + 1,
+        row.value().getObject("akka").getLong(Fields.SequenceTo)
+      )
+    )).mapMaterializedValue(_ => NotUsed)
+
+    eventsByPersistenceIdSource(source)
   }
 
   /*
@@ -64,37 +143,59 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
 
    CREATE INDEX `tags` ON `akka`((all (`all_tags`)),`ordering`)
    */
+  // TODO, just the stage now it allows the query to stop
   override def currentEventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] = {
-    // TODO, include offset and workout index
+    // TODO make configurable
+    val params = N1qlParams.build()
+      //      .consistency(ScanConsistency.NOT_BOUNDED) // async
+      .consistency(ScanConsistency.REQUEST_PLUS) // read own writes
+
     val query = offset match {
       case NoOffset =>
         N1qlQuery.parameterized(
           """select * FROM akka
             |WHERE ANY tag IN akka.all_tags SATISFIES tag = $1 END
-            |ORDER BY ordering""".stripMargin, JsonArray.from(tag))
+            |ORDER BY ordering""".stripMargin, JsonArray.from(tag), params)
 
-      case Sequence(o) =>
+      case Sequence(o: Long) =>
         N1qlQuery.parameterized(
           """select * FROM akka
             |WHERE ANY tag IN akka.all_tags SATISFIES tag = $1 END
             |AND ordering >= $2
-            |ORDER BY ordering""".stripMargin, JsonArray.from(o, tag))
+            |ORDER BY ordering""".stripMargin, JsonArray.from(List(o, tag).asJava), params)
 
       case TimeBasedUUID(_) =>
         throw new IllegalArgumentException("TimeBasedUUIDs are not supported")
     }
 
-    n1qlQuery(query).map((row: AsyncN1qlQueryRow) => {
-      val deserialized: immutable.Seq[TaggedPersistentRepr] = deserialize(row, Long.MaxValue, serialization, extractTaggedEvent).filter(_.tags.contains(tag))
-      val ordering = row.value().getLong(Fields.Ordering)
+    eventsByTagSource(n1qlQuery(query), tag)
+  }
+
+  private def eventsByPersistenceIdSource(in: Source[AsyncN1qlQueryRow, NotUsed]): Source[EventEnvelope, NotUsed] = {
+    in.map((row: AsyncN1qlQueryRow) => {
+      val value = row.value().getObject("akka")
+      val deserialized: immutable.Seq[TaggedPersistentRepr] = deserialize(value, Long.MaxValue, serialization, extractTaggedEvent)
       deserialized.map(tpr => EventEnvelope(
-        Offset.sequence(ordering), // FIXME, this won't work as
+        Offset.sequence(tpr.pr.sequenceNr), // FIXME, should this be +1, check inclusivity of offsets
         tpr.pr.persistenceId,
         tpr.pr.sequenceNr,
         tpr.pr.payload
       ))
     }).mapConcat(identity)
+  }
 
+  private def eventsByTagSource(in: Source[AsyncN1qlQueryRow, NotUsed], tag: String): Source[EventEnvelope, NotUsed] = {
+    in.map((row: AsyncN1qlQueryRow) => {
+      val value = row.value().getObject("akka")
+      val deserialized: immutable.Seq[TaggedPersistentRepr] = deserialize(value, Long.MaxValue, serialization, extractTaggedEvent).filter(_.tags.contains(tag))
+      val ordering = value.getLong(Fields.Ordering)
+      deserialized.map(tpr => EventEnvelope(
+        Offset.sequence(ordering + 1), // set to the next one so resume doesn't get this event back
+        tpr.pr.persistenceId,
+        tpr.pr.sequenceNr,
+        tpr.pr.payload
+      ))
+    }).mapConcat(identity)
   }
 
   /**
@@ -110,9 +211,9 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
   }
 
   private def n1qlQuery(query: N1qlQuery): Source[AsyncN1qlQueryRow, NotUsed] = {
-    Source.fromPublisher(RxReactiveStreams.toPublisher(
-      bucket.query(query).flatMap(results => results.rows()))
-    )
+    Source.fromPublisher(RxReactiveStreams.toPublisher({
+      bucket.query(query).flatMap(results => results.rows())
+    }))
   }
   private def n1qlQuery(query: Statement): Source[AsyncN1qlQueryRow, NotUsed] = {
     Source.fromPublisher(RxReactiveStreams.toPublisher(

@@ -3,8 +3,8 @@ package akka.persistence.couchbase
 import akka.persistence.journal.{Tagged, WriteEventAdapter}
 
 class ColorFruitTagger extends WriteEventAdapter {
-  val colors = Set("green", "black", "blue", "yellow")
-  val fruits = Set("apple", "banana")
+  val colors = Set("green", "black", "blue", "yellow", "pink")
+  val fruits = Set("apple", "banana", "kiwi")
   override def toJournal(event: Any): Any = event match {
     case s: String =>
       val colorTags = colors.foldLeft(Set.empty[String])((acc, c) => if (s.contains(c)) acc + c else acc)

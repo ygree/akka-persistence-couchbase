@@ -27,9 +27,8 @@ object CouchbaseJournal {
 
   case class TaggedPersistentRepr(pr: PersistentRepr, tags: Set[String])
 
-  def deserialize[T](row: AsyncN1qlQueryRow, toSequenceNr: Long, serialization: Serialization,
+  def deserialize[T](value: JsonObject, toSequenceNr: Long, serialization: Serialization,
                      extract: (String, String, JsonObject, Serialization) => T): im.Seq[T] = {
-    val value = row.value().getObject("akka")
     val persistenceId = value.getString(Fields.PersistenceId)
     val from: Long = value.getLong(Fields.SequenceFrom)
     val sequenceTo: Long = value.getLong(Fields.SequenceTo)
@@ -205,6 +204,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     p.future
   }
 
+  // TODO use eventsByPersistenceId
   override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(recoveryCallback: PersistentRepr => Unit): Future[Unit] = {
     log.info("asyncReplayMessages {} {} {} {}", persistenceId, fromSequenceNr, toSequenceNr, max)
     val deletedTo: Future[Long] = zeroOrOneObservableToFuture(asyncBucket.get(s"$persistenceId-meta"))
@@ -220,13 +220,14 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
 
       log.info("Starting at sequence_nr {}", starting)
 
-      val what = select("*")
+      // FIXME, needs an orderby make sure index works with it
+      val replayQuery = select("*")
         .from("akka")
         .where(x(Fields.PersistenceId).eq(x("$1"))
           .and(x(Fields.SequenceFrom).gte(starting)
             .and(Fields.SequenceFrom).lte(toSequenceNr)))
 
-      log.info("Query: " + what)
+      log.info("Query: " + replayQuery)
 
       def limit[T](in: Observable[T]): Observable[T] = {
         if (max >= 0 && max != Long.MaxValue)
@@ -235,7 +236,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
           in
       }
 
-      val query = N1qlQuery.parameterized(what, JsonArray.from(persistenceId))
+      val query = N1qlQuery.parameterized(replayQuery, JsonArray.from(persistenceId))
       val done = Promise[Unit]
 
       limit(asyncBucket.query(query)
@@ -250,7 +251,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
               done.tryFailure(e)
             }
             override def onNext(row: AsyncN1qlQueryRow): Unit = {
-              CouchbaseJournal.deserialize(row, toSequenceNr, serialization, CouchbaseJournal.extractEvent).foreach { pr =>
+              CouchbaseJournal.deserialize(row.value().getObject("akka"), toSequenceNr, serialization, CouchbaseJournal.extractEvent).foreach { pr =>
                 recoveryCallback(pr)
               }
             }
