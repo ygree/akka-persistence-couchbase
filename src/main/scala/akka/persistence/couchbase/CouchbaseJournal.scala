@@ -43,11 +43,8 @@ object CouchbaseJournal {
   }
 
   def extractEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization): PersistentRepr = {
-    val serManifest = event.getString("manifest")
-    val serId = event.getInt("id")
-    val bytes = Base64.getDecoder.decode(event.getString("payload"))
-    val payload = serialization.deserialize(bytes, serId, serManifest).get // hrmm
-    val sequenceNr = event.getLong(Fields.SequenceNr)
+   val payload = Serialized.fromJsonObject(serialization, event)
+   val sequenceNr = event.getLong(Fields.SequenceNr)
     PersistentRepr(
       payload = payload,
       sequenceNr = sequenceNr,
@@ -72,11 +69,18 @@ object CouchbaseJournal {
   }
 
   object Fields {
+    val Type = "type"
+
     val PersistenceId = "persistence_id"
     val SequenceNr = "sequence_nr"
     val SequenceFrom = "sequence_from"
     val SequenceTo = "sequence_to"
     val Ordering = "ordering"
+    val Timestamp = "timestamp"
+    val Payload = "payload"
+
+    val SerializerManifest = "ser_manifest"
+    val SerializerId = "ser_id"
   }
 
 }
@@ -122,16 +126,10 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
           case other => (other.asInstanceOf[AnyRef], Set.empty)
         }
         allTags = allTags ++ tags
-        val m = JsonObject.create()
-        val serializer = serialization.findSerializerFor(event)
-        val serManifest = Serializers.manifestFor(serializer, event)
-        val serId = serializer.identifier
-        m.put("manifest", serManifest)
-        m.put("id", serId)
-        val bytes: String = Base64.getEncoder.encodeToString(serialization.serialize(event).get) // TODO deal with failure
-        m.put("payload", bytes)
-        m.put("tags", JsonArray.from(tags.toList.asJava))
-        m.put(Fields.SequenceNr, msg.sequenceNr)
+        val ser = Serialized.serialize(serialization, event)
+        ser.asJson()
+          .put("tags", JsonArray.from(tags.toList.asJava))
+          .put(Fields.SequenceNr, msg.sequenceNr)
       }
 
       val insert: JsonObject = JsonObject.create()
@@ -183,26 +181,6 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     }
   }
 
-  private def singleObservableToFuture[T](o: Observable[T]): Future[T] = {
-    val p = Promise[T]
-    o.single()
-      .subscribe(new Subscriber[T]() {
-        override def onCompleted(): Unit = ()
-        override def onError(e: Throwable): Unit = p.tryFailure(e)
-        override def onNext(t: T): Unit = p.tryComplete(Try(t))
-      })
-    p.future
-  }
-
-  private def zeroOrOneObservableToFuture[T](o: Observable[T]): Future[Option[T]] = {
-    val p = Promise[Option[T]]
-    o.subscribe(new Subscriber[T]() {
-      override def onCompleted(): Unit = p.tryComplete(Try(None))
-      override def onError(e: Throwable): Unit = p.tryFailure(e)
-      override def onNext(t: T): Unit = p.tryComplete(Try(Some(t)))
-    })
-    p.future
-  }
 
   // TODO use eventsByPersistenceId
   override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(recoveryCallback: PersistentRepr => Unit): Future[Unit] = {

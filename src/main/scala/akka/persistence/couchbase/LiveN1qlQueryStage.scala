@@ -30,6 +30,7 @@ class LiveN1qlQueryStage[S](initialQuery: N1qlQuery, namedParams: JsonObject, bu
   class LiveN1qlQueryStageLogic extends TimerGraphStageLogicWithLogging(shape) with OutHandler with Control {
     var currentState: S = initialState
     var rowsInCurrentQuery = 0
+    // TODO use a mutable buffer e.g. ArrayDeque
     var buffer = Vector.empty[AsyncN1qlQueryRow]
     var state: InternalState = Idle
 
