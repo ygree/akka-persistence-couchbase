@@ -16,6 +16,8 @@ case class Serialized(identifier: Int, manifest: String, payload: Array[Byte]) {
 }
 
 object Serialized {
+  // TODO AsycSerializers
+
   def serialize(serialization: Serialization, event: AnyRef): Serialized = {
     val serializer = serialization.findSerializerFor(event)
     val serManifest = Serializers.manifestFor(serializer, event)

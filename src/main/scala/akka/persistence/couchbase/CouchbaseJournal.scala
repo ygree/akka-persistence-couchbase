@@ -54,9 +54,9 @@ object CouchbaseJournal {
   }
 
   def extractTaggedEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization): TaggedPersistentRepr = {
-    val serManifest = event.getString("manifest")
-    val serId = event.getInt("id")
-    val bytes = Base64.getDecoder.decode(event.getString("payload"))
+    val serManifest = event.getString(Fields.SerializerManifest)
+    val serId = event.getInt(Fields.SerializerId)
+    val bytes = Base64.getDecoder.decode(event.getString(Fields.Payload))
     val payload = serialization.deserialize(bytes, serId, serManifest).get // hrmm
     val sequenceNr = event.getLong(Fields.SequenceNr)
     val tags: Set[AnyRef] = event.getArray("tags").toList.asScala.toSet

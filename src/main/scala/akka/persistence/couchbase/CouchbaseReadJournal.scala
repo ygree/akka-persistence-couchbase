@@ -67,7 +67,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     val params: JsonObject = JsonObject.create().put("tag", tag)
     val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
 
-    eventsByTagSource(Source.fromGraph(new LiveN1qlQueryStage[Long](
+    eventsByTagSource(Source.fromGraph(new N1qlQueryStage[Long](
       N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, initialOrdering), queryParams),
       params, bucket, initialOrdering,
       ordering => Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),
@@ -95,7 +95,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
 
     val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
     // TODO do the deleted to query first and start from higher of that and fromSequenceNr
-    val source = Source.fromGraph(new LiveN1qlQueryStage[EventsByPersistenceIdState](
+    val source = Source.fromGraph(new N1qlQueryStage[EventsByPersistenceIdState](
       N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
       params,
       bucket,
@@ -123,7 +123,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
     // TODO do the deleted to query first and start from higher of that and fromSequenceNr
 
-    val source = Source.fromGraph(new LiveN1qlQueryStage[EventsByPersistenceIdState](
+    val source = Source.fromGraph(new N1qlQueryStage[EventsByPersistenceIdState](
       N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
       params,
       bucket,

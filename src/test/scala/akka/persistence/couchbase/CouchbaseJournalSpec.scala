@@ -9,6 +9,7 @@ import com.typesafe.config.ConfigFactory
 class CouchbaseJournalSpec extends JournalSpec(ConfigFactory.load()) {
 
   protected override def beforeAll(): Unit = {
+    // FIXME, use a global connection / get it from the journal
     super.beforeAll()
     CouchbaseCluster.create()
       .authenticate("admin", "admin1")
@@ -17,8 +18,8 @@ class CouchbaseJournalSpec extends JournalSpec(ConfigFactory.load()) {
   }
 
   override def supportsRejectingNonSerializableObjects: CapabilityFlag =
-    false // or CapabilityFlag.off
+    false// or CapabilityFlag.off
 
   override def supportsSerialization: CapabilityFlag =
-    false // or CapabilityFlag.on
+    true // or CapabilityFlag.on
 }
