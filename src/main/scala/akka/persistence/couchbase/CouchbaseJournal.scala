@@ -148,26 +148,21 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     val result = Future.sequence(inserts.map((jo: (String, JsonObject)) => {
       val p = Promise[Try[Unit]]()
       // TODO make persistTo configurable
-      val nextCount: Observable[JsonLongDocument] = asyncBucket.counter("akka", 1, 0)
+      val something: Observable[JsonLongDocument] = asyncBucket.counter("akka", 1, 0)
 
-      val write = nextCount.flatMap(id => {
+      val write = something.flatMap(id => {
         val withId = jo._2.put(Fields.Ordering, id.content())
         asyncBucket.insert(JsonDocument.create(jo._1, withId))
       })
 
 
       write.single().subscribe(new Subscriber[JsonDocument]() {
-        override def onCompleted(): Unit = {
-          p.tryComplete(Try(Try(())))
-        }
+        override def onCompleted(): Unit = p.tryComplete(Try(Try(())))
         override def onError(e: Throwable): Unit = p.tryFailure(e)
-        override def onNext(t: JsonDocument): Unit = {
-          log.info("Write complete {}", t)
-        }
+        override def onNext(t: JsonDocument): Unit = ()
       })
       p.future
     }))
-    result.onComplete(r => log.info("Full write complete {}: {}", messages, r))
     result
   }
 
@@ -212,6 +207,8 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
 
       log.info("Query: " + replayQuery)
 
+      // FIXME use currentEventsByPersistenceId query (benefit from paging)
+
       def limit[T](in: Observable[T]): Observable[T] = {
         if (max >= 0 && max != Long.MaxValue)
           in.limit(max.asInstanceOf[Int]) // TODO: Does this cancel the query? // FIXME why is this a bloody int? create a subscriber to do this
@@ -219,8 +216,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
           in
       }
 
-      // TODO think this consistency level
-      val query = N1qlQuery.parameterized(replayQuery, JsonArray.from(persistenceId), N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS))
+      val query = N1qlQuery.parameterized(replayQuery, JsonArray.from(persistenceId))
       val done = Promise[Unit]
 
       limit(asyncBucket.query(query)

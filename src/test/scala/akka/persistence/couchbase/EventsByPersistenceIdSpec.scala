@@ -22,6 +22,13 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       .query(N1qlQuery.simple("delete from akka"))
   }
 
+  protected override def afterAll(): Unit = {
+    shutdown(system)
+  }
+
+  // TODO run this test with smaller pageSize, when that is configurable
+
+
   val noMsgTimeout = 100.millis
 
   implicit val materializer = ActorMaterializer()
@@ -189,6 +196,18 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
         .request(100)
         .expectNextN((21 to 32).map(i => s"i3-$i"))
         .expectComplete()
+    }
+
+    "complete when same number of events as page size" in {
+      // TODO these hardcoded assignments of persistenceId is a mess, must be unique per test
+      setup("a2", queries.pageSize)
+
+      val src = queries.currentEventsByPersistenceId("a2", 0L, Long.MaxValue)
+      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+        .request(queries.pageSize + 10)
+
+        probe.expectNextN(queries.pageSize) should === ((1 to queries.pageSize).map(n => s"a2-$n").toList)
+        probe.expectComplete()
     }
 
   }

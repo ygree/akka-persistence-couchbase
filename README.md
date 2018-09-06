@@ -20,6 +20,6 @@ CREATE INDEX `pi2` ON `akka`((self.`persistence_id`),(self.`sequence_from`))
 
 For events by tag:
 ```
-CREATE INDEX `tags3` ON `akka`((all (`all_tags`)),`ordering`)
+CREATE INDEX `tags` ON `akka`((all (`all_tags`)),`ordering`)
 ```
 

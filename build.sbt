@@ -19,5 +19,6 @@ lazy val root = (project in file("."))
   .settings(
     name := "akka-persistence-couchbase",
     organization := "com.lightbend.akka",
-    libraryDependencies ++= dependencies
+    libraryDependencies ++= dependencies,
+    parallelExecution in Test := false
   )

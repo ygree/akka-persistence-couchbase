@@ -9,7 +9,9 @@
         </layout>
     </appender>
 
-    <root level="DEBUG">
+    <logger name="akka" level="DEBUG" />
+
+    <root level="INFO">
         <appender-ref ref="STDOUT"/>
     </root>
 

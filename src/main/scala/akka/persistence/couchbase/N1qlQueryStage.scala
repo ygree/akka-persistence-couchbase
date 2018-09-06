@@ -15,11 +15,13 @@ object N1qlQueryStage {
 
   sealed trait InternalState
   final case object Idle extends InternalState
+  final case object IdleAfterFullPage extends InternalState
   final case object Querying extends InternalState
 }
 
 // TODO pagination
-class N1qlQueryStage[S](initialQuery: N1qlQuery, namedParams: JsonObject, bucket: AsyncBucket, initialState: S, nextQuery: S => Option[N1qlQuery], updateState: (S, AsyncN1qlQueryRow) => S)
+class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, namedParams: JsonObject, bucket: AsyncBucket,
+  initialState: S, nextQuery: S => Option[N1qlQuery], updateState: (S, AsyncN1qlQueryRow) => S)
   extends GraphStageWithMaterializedValue[SourceShape[AsyncN1qlQueryRow], N1qlQueryStage.Control] {
 
   import N1qlQueryStage._
@@ -27,7 +29,7 @@ class N1qlQueryStage[S](initialQuery: N1qlQuery, namedParams: JsonObject, bucket
   val out: Outlet[AsyncN1qlQueryRow] = Outlet("LiveN1qlQuery.out")
   override def shape: SourceShape[AsyncN1qlQueryRow] = SourceShape(out)
 
-  class LiveN1qlQueryStageLogic extends TimerGraphStageLogicWithLogging(shape) with OutHandler with Control {
+  class N1qlQueryStageLogic extends TimerGraphStageLogicWithLogging(shape) with OutHandler with Control {
     var currentState: S = initialState
     var rowsInCurrentQuery = 0
     // TODO use a mutable buffer e.g. ArrayDeque
@@ -44,13 +46,25 @@ class N1qlQueryStage[S](initialQuery: N1qlQuery, namedParams: JsonObject, bucket
 
     private val completeCb = getAsyncCallback[Unit] { _ =>
       log.debug("Query complete. Remaining buffer: {}", buffer)
-      state = Idle
+      if (rowsInCurrentQuery == pageSize)
+        state = IdleAfterFullPage
+      else
+        state = Idle
       if (buffer.isEmpty) {
-        if (rowsInCurrentQuery > 0) {
-          // if rows then kick off the next query
-          doNextQuery()
+        if (live) {
+          // continue until we don't get a full page
+          // TODO alternative would be to more aggressively query next until we get empty result
+          if (rowsInCurrentQuery == pageSize)
+            doNextQuery()
+          else {
+            // wait for timer
+          }
         } else {
-          // if no rows from last, wait for timer
+          // non-live, continue until we don't get a full page
+          if (rowsInCurrentQuery == pageSize)
+            doNextQuery()
+          else
+            completeStage()
         }
       } else {
         tryPush()
@@ -65,7 +79,8 @@ class N1qlQueryStage[S](initialQuery: N1qlQuery, namedParams: JsonObject, bucket
 
     override def preStart(): Unit = {
       // TODO make configurable
-      schedulePeriodicallyWithInitialDelay(Poll, 1.second, 1.second)
+      if (live)
+        schedulePeriodicallyWithInitialDelay(Poll, 1.second, 1.second)
       executeQuery(initialQuery)
     }
 
@@ -73,7 +88,7 @@ class N1qlQueryStage[S](initialQuery: N1qlQuery, namedParams: JsonObject, bucket
     override protected def onTimer(timerKey: Any): Unit = timerKey match {
       case Poll =>
         state match {
-          case Idle =>
+          case Idle | IdleAfterFullPage =>
             log.debug("Poll when idle")
             if (buffer.isEmpty) {
               doNextQuery()
@@ -86,8 +101,7 @@ class N1qlQueryStage[S](initialQuery: N1qlQuery, namedParams: JsonObject, bucket
     }
 
     private def doNextQuery(): Unit = {
-      require(state == Idle)
-      state = Querying
+      require(state == Idle || state == IdleAfterFullPage)
       nextQuery(currentState) match {
         case Some(next) =>
           log.debug("doNextQuery {}", next)
@@ -100,6 +114,7 @@ class N1qlQueryStage[S](initialQuery: N1qlQuery, namedParams: JsonObject, bucket
     }
 
     private def executeQuery(query: N1qlQuery): Unit = {
+      state = Querying
       // FIXME deal with initial errors
       bucket.query(query).flatMap(result => result.rows()).subscribe(new Subscriber[AsyncN1qlQueryRow]() {
         override def onCompleted(): Unit = completeCb.invoke(())
@@ -111,6 +126,16 @@ class N1qlQueryStage[S](initialQuery: N1qlQuery, namedParams: JsonObject, bucket
     override def onPull(): Unit = {
       log.debug("onPull {}", buffer)
       tryPush()
+
+      if (!live && buffer.isEmpty) {
+        state match {
+          case IdleAfterFullPage =>
+          doNextQuery()
+          case Idle =>
+            completeStage
+          case Querying => // more in flight
+        }
+      }
     }
 
     private def tryPush(): Unit = {
@@ -130,7 +155,7 @@ class N1qlQueryStage[S](initialQuery: N1qlQuery, namedParams: JsonObject, bucket
 
 
   override def createLogicAndMaterializedValue(inheritedAttributes: Attributes): (GraphStageLogic, N1qlQueryStage.Control) = {
-    val logic = new LiveN1qlQueryStageLogic()
+    val logic = new N1qlQueryStageLogic()
     (logic, logic)
   }
 }

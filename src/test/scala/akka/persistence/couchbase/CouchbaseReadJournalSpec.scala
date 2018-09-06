@@ -25,6 +25,10 @@ class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournal
       .query(N1qlQuery.simple("delete from akka"))
   }
 
+  protected override def afterAll(): Unit = {
+    shutdown(system)
+  }
+
 
   val waitTime = 100.millis
   lazy val queries: CouchbaseReadJournal =
