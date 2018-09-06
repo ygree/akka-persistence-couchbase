@@ -15,11 +15,11 @@ Index:
 
 For recovery and events by persistenceId:
 ```
-CREATE INDEX `recovery` ON `akka`((`persistenceId`),(`sequence_from`))
+CREATE INDEX `pi2` ON `akka`((self.`persistenceId`),(self.`sequence_from`))
 ```
 
 For events by tag:
 ```
-CREATE INDEX `tags` ON `akka`((all (`all_tags`)),`ordering`)
+CREATE INDEX `tags3` ON `akka`((all (`all_tags`)),`ordering`)
 ```
 

@@ -148,21 +148,26 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     val result = Future.sequence(inserts.map((jo: (String, JsonObject)) => {
       val p = Promise[Try[Unit]]()
       // TODO make persistTo configurable
-      val something: Observable[JsonLongDocument] = asyncBucket.counter("akka", 1, 0)
+      val nextCount: Observable[JsonLongDocument] = asyncBucket.counter("akka", 1, 0)
 
-      val write = something.flatMap(id => {
+      val write = nextCount.flatMap(id => {
         val withId = jo._2.put(Fields.Ordering, id.content())
         asyncBucket.insert(JsonDocument.create(jo._1, withId))
       })
 
 
       write.single().subscribe(new Subscriber[JsonDocument]() {
-        override def onCompleted(): Unit = p.tryComplete(Try(Try(())))
+        override def onCompleted(): Unit = {
+          p.tryComplete(Try(Try(())))
+        }
         override def onError(e: Throwable): Unit = p.tryFailure(e)
-        override def onNext(t: JsonDocument): Unit = ()
+        override def onNext(t: JsonDocument): Unit = {
+          log.info("Write complete {}", t)
+        }
       })
       p.future
     }))
+    result.onComplete(r => log.info("Full write complete {}: {}", messages, r))
     result
   }
 
@@ -214,7 +219,8 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
           in
       }
 
-      val query = N1qlQuery.parameterized(replayQuery, JsonArray.from(persistenceId))
+      // TODO think this consistency level
+      val query = N1qlQuery.parameterized(replayQuery, JsonArray.from(persistenceId), N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS))
       val done = Promise[Unit]
 
       limit(asyncBucket.query(query)
