@@ -192,13 +192,13 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
 
   private def n1qlQuery(query: N1qlQuery): Source[AsyncN1qlQueryRow, NotUsed] = {
     Source.fromPublisher(RxReactiveStreams.toPublisher({
-      bucket.query(query).flatMap(results => results.rows())
+      bucket.query(query).flatMap(toFunc1(results => results.rows()))
     }))
   }
   private def n1qlQuery(query: Statement): Source[AsyncN1qlQueryRow, NotUsed] = {
     Source.fromPublisher(RxReactiveStreams.toPublisher(
-      bucket.query(query).flatMap(results => results.rows()))
-    )
+      bucket.query(query).flatMap(toFunc1(results => results.rows()))
+    ))
   }
 
   /*

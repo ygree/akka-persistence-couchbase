@@ -1,5 +1,6 @@
 package akka.persistence
 
+import rx.functions.Func1
 import rx.{Observable, Subscriber}
 
 import scala.concurrent.{Future, Promise}
@@ -26,6 +27,12 @@ package object couchbase {
       override def onNext(t: T): Unit = p.tryComplete(Try(Some(t)))
     })
     p.future
+  }
+
+
+  // 2.11 inference :(
+  def toFunc1[A, B](f: A => B): Func1[A, B] = new Func1[A, B] {
+    override def call(a: A): B = f(a)
   }
 
 }

@@ -62,7 +62,7 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
     // FIXME, deal with errors
     val result: Observable[AsyncN1qlQueryRow] = asyncBucket.query(N1qlQuery.parameterized(query,
       JsonArray.from("snapshot", persistenceId), N1qlParams.build().consistency(ScanConsistency.STATEMENT_PLUS)))
-      .flatMap(_.rows())
+      .flatMap(toFunc1(_.rows()))
 
     zeroOrOneObservableToFuture(result).map { row =>
       row.map { snapshot =>

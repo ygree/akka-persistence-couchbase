@@ -116,7 +116,7 @@ class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, n
     private def executeQuery(query: N1qlQuery): Unit = {
       state = Querying
       // FIXME deal with initial errors
-      bucket.query(query).flatMap(result => result.rows()).subscribe(new Subscriber[AsyncN1qlQueryRow]() {
+      bucket.query(query).flatMap(toFunc1(_.rows())).subscribe(new Subscriber[AsyncN1qlQueryRow]() {
         override def onCompleted(): Unit = completeCb.invoke(())
         override def onError(t: Throwable): Unit = failedCb.invoke(t)
         override def onNext(row: AsyncN1qlQueryRow): Unit = newRowCb.invoke(row)

@@ -1,6 +1,6 @@
 val AkkaVersion = "2.5.15"
 
-crossScalaVersions := Seq("2.12.6")
+crossScalaVersions := Seq("2.12.6", "2.11.12")
 
 val dependencies = Seq(
   "com.couchbase.client" % "java-client" % "2.6.0",

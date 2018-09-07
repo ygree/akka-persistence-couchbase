@@ -150,10 +150,10 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
       // TODO make persistTo configurable
       val something: Observable[JsonLongDocument] = asyncBucket.counter("akka", 1, 0)
 
-      val write = something.flatMap(id => {
+      val write = something.flatMap(toFunc1(id => {
         val withId = jo._2.put(Fields.Ordering, id.content())
         asyncBucket.insert(JsonDocument.create(jo._1, withId))
-      })
+      }))
 
 
       write.single().subscribe(new Subscriber[JsonDocument]() {
@@ -220,7 +220,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
       val done = Promise[Unit]
 
       limit(asyncBucket.query(query)
-        .flatMap(result => result.rows()))
+        .flatMap(toFunc1(result => result.rows())))
         .subscribe(
           new Subscriber[AsyncN1qlQueryRow]() {
             override def onCompleted(): Unit = {
@@ -268,7 +268,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     log.info("Executing: {}", highestSequenceNrQuery)
 
     asyncBucket.query(highestSequenceNrQuery)
-      .flatMap(result => result.rows())
+      .flatMap(toFunc1(result => result.rows()))
       .subscribe(new Subscriber[AsyncN1qlQueryRow]() {
         override def onCompleted(): Unit = {
           if (!result.isCompleted)
