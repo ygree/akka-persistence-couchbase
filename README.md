@@ -23,3 +23,6 @@ For events by tag:
 CREATE INDEX `tags` ON `akka`((all (`all_tags`)),`ordering`)
 ```
 
+## License
+
+Akka Persistence Couchbase is Open Source and available under the Apache 2 License.
