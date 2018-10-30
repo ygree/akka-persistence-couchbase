@@ -1,10 +1,14 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
 import akka.stream.stage._
-import akka.stream.{Attributes, Outlet, SourceShape}
+import akka.stream.{ Attributes, Outlet, SourceShape }
 import com.couchbase.client.java.AsyncBucket
 import com.couchbase.client.java.document.json.JsonObject
-import com.couchbase.client.java.query.{AsyncN1qlQueryRow, N1qlQuery}
+import com.couchbase.client.java.query.{ AsyncN1qlQueryRow, N1qlQuery }
 import rx.Subscriber
 
 import scala.concurrent.duration._
@@ -21,7 +25,7 @@ object N1qlQueryStage {
 
 // TODO pagination
 class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, namedParams: JsonObject, bucket: AsyncBucket,
-  initialState: S, nextQuery: S => Option[N1qlQuery], updateState: (S, AsyncN1qlQueryRow) => S)
+                        initialState: S, nextQuery: S => Option[N1qlQuery], updateState: (S, AsyncN1qlQueryRow) => S)
   extends GraphStageWithMaterializedValue[SourceShape[AsyncN1qlQueryRow], N1qlQueryStage.Control] {
 
   import N1qlQueryStage._
@@ -84,7 +88,6 @@ class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, n
       executeQuery(initialQuery)
     }
 
-
     override protected def onTimer(timerKey: Any): Unit = timerKey match {
       case Poll =>
         state match {
@@ -130,7 +133,7 @@ class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, n
       if (!live && buffer.isEmpty) {
         state match {
           case IdleAfterFullPage =>
-          doNextQuery()
+            doNextQuery()
           case Idle =>
             completeStage
           case Querying => // more in flight
@@ -152,7 +155,6 @@ class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, n
 
     setHandler(out, this)
   }
-
 
   override def createLogicAndMaterializedValue(inheritedAttributes: Attributes): (GraphStageLogic, N1qlQueryStage.Control) = {
     val logic = new N1qlQueryStageLogic()

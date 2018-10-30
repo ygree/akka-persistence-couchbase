@@ -1,29 +1,32 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
 import akka.persistence.couchbase.CouchbaseJournal.Fields
 import akka.persistence.snapshot.SnapshotStore
-import akka.persistence.{SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria}
+import akka.persistence.{ SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria }
 import akka.serialization.SerializationExtension
 import com.couchbase.client.java.document.JsonDocument
-import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
+import com.couchbase.client.java.document.json.{ JsonArray, JsonObject }
 import com.couchbase.client.java.error.DocumentDoesNotExistException
 import com.couchbase.client.java.query.Delete._
 import com.couchbase.client.java.query.Select.select
-import com.couchbase.client.java.query.{N1qlQuery, _}
+import com.couchbase.client.java.query.{ N1qlQuery, _ }
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.Sort._
-import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster, CouchbaseCluster}
+import com.couchbase.client.java.{ AsyncBucket, Bucket, Cluster, CouchbaseCluster }
 import com.typesafe.config.Config
-import rx.{Observable, Subscriber}
+import rx.{ Observable, Subscriber }
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ ExecutionContext, Future }
 
 // FIXME, share a Couchbase cluster between read/journal and snapshot
 // Make it an extension to look them up?
 class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
-
 
   private val config: CouchbaseSettings = CouchbaseSettings(cfg)
   private implicit val ec: ExecutionContext = context.dispatcher
@@ -40,15 +43,15 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
   val serialization = SerializationExtension(context.system)
 
   /**
-    * select * from akka where type = "snapshot"
-    * and persistence_id = "p-1"
-    * and sequence_nr <= 100
-    * and sequence_nr >= 0
-    * and timestamp <= 1635974897888
-    * order by sequence_nr desc
-    * limit 1
-    *
-    */
+   * select * from akka where type = "snapshot"
+   * and persistence_id = "p-1"
+   * and sequence_nr <= 100
+   * and sequence_nr >= 0
+   * and timestamp <= 1635974897888
+   * order by sequence_nr desc
+   * limit 1
+   *
+   */
 
   def loadAsync(persistenceId: String, criteria: SnapshotSelectionCriteria): Future[Option[SelectedSnapshot]] = {
     val filter = snapshotFilter(criteria)
@@ -60,7 +63,8 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
       .limit(1)
 
     // FIXME, deal with errors
-    val result: Observable[AsyncN1qlQueryRow] = asyncBucket.query(N1qlQuery.parameterized(query,
+    val result: Observable[AsyncN1qlQueryRow] = asyncBucket.query(N1qlQuery.parameterized(
+      query,
       JsonArray.from("snapshot", persistenceId), N1qlParams.build().consistency(ScanConsistency.STATEMENT_PLUS)))
       .flatMap(toFunc1(_.rows()))
 
@@ -71,14 +75,11 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
           SnapshotMetadata(
             persistenceId,
             value.getLong(Fields.SequenceNr),
-            value.getLong(Fields.Timestamp)
-          ),
-          Serialized.fromJsonObject(serialization, value)
-        )
+            value.getLong(Fields.Timestamp)),
+          Serialized.fromJsonObject(serialization, value))
       }
     }
   }
-
 
   def saveAsync(metadata: SnapshotMetadata, snapshot: Any): Future[Unit] = {
     val ser: Serialized = Serialized.serialize(serialization, snapshot.asInstanceOf[AnyRef])

@@ -1,9 +1,13 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
 import java.util.Base64
 
 import akka.persistence.couchbase.CouchbaseJournal.Fields
-import akka.serialization.{Serialization, Serializers}
+import akka.serialization.{ Serialization, Serializers }
 import com.couchbase.client.java.document.json.JsonObject
 
 case class Serialized(identifier: Int, manifest: String, payload: Array[Byte]) {

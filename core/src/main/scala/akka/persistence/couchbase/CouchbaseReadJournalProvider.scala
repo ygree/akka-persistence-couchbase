@@ -1,7 +1,11 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
 import akka.actor.ExtendedActorSystem
-import akka.persistence.query.{ReadJournalProvider, javadsl}
+import akka.persistence.query.{ ReadJournalProvider, javadsl }
 import akka.persistence.query.scaladsl.ReadJournal
 import com.typesafe.config.Config
 
