@@ -1,21 +1,25 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
 import akka.NotUsed
 import akka.actor.ExtendedActorSystem
-import akka.persistence.couchbase.CouchbaseJournal.{Fields, TaggedPersistentRepr, deserialize, extractTaggedEvent}
+import akka.persistence.couchbase.CouchbaseJournal.{ Fields, TaggedPersistentRepr, deserialize, extractTaggedEvent }
 import akka.persistence.query.scaladsl._
 import akka.persistence.query._
-import akka.serialization.{Serialization, SerializationExtension}
+import akka.serialization.{ Serialization, SerializationExtension }
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.CouchbaseCluster
-import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
+import com.couchbase.client.java.document.json.{ JsonArray, JsonObject }
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
 import com.typesafe.config.Config
-import rx.{Observable, RxReactiveStreams}
+import rx.{ Observable, RxReactiveStreams }
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -38,7 +42,6 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
   with CurrentEventsByTagQuery
   with CurrentPersistenceIdsQuery
   with PersistenceIdsQuery {
-
 
   private val serialization: Serialization = SerializationExtension(as)
   // TODO config
@@ -70,7 +73,6 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
       |order by sequence_from
       |limit $limit
     """.stripMargin
-
 
   case class EventsByPersistenceIdState(from: Long, to: Long)
 
@@ -107,9 +109,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
       },
       (_, row) => EventsByPersistenceIdState(
         row.value().getObject("akka").getLong(Fields.SequenceFrom) + 1,
-        row.value().getObject("akka").getLong(Fields.SequenceTo)
-      )
-    )).mapMaterializedValue(_ => NotUsed)
+        row.value().getObject("akka").getLong(Fields.SequenceTo)))).mapMaterializedValue(_ => NotUsed)
 
     eventsByPersistenceIdSource(source)
   }
@@ -130,8 +130,8 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
 
   private def internalEventsByTag(live: Boolean, tag: String, offset: Offset): Source[EventEnvelope, NotUsed] = {
     val initialOrdering: Long = offset match {
-      case NoOffset => 0L
-      case Sequence(o) => o
+      case NoOffset         => 0L
+      case Sequence(o)      => o
       case TimeBasedUUID(_) => throw new IllegalArgumentException("Couchbase Journal does not support Timeuuid offsets")
     }
 
@@ -146,10 +146,8 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
       N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, initialOrdering), queryParams),
       params, bucket, initialOrdering,
       ordering => Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),
-      (_, row) => row.value().getObject("akka").getLong(Fields.Ordering) + 1
-    )).mapMaterializedValue(_ => NotUsed), tag)
+      (_, row) => row.value().getObject("akka").getLong(Fields.Ordering) + 1)).mapMaterializedValue(_ => NotUsed), tag)
   }
-
 
   private def eventsByPersistenceIdSource(in: Source[AsyncN1qlQueryRow, NotUsed]): Source[EventEnvelope, NotUsed] = {
     in.map((row: AsyncN1qlQueryRow) => {
@@ -159,8 +157,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
         Offset.sequence(tpr.pr.sequenceNr), // FIXME, should this be +1, check inclusivity of offsets
         tpr.pr.persistenceId,
         tpr.pr.sequenceNr,
-        tpr.pr.payload
-      ))
+        tpr.pr.payload))
     }).mapConcat(identity)
   }
 
@@ -173,14 +170,13 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
         Offset.sequence(ordering + 1), // set to the next one so resume doesn't get this event back
         tpr.pr.persistenceId,
         tpr.pr.sequenceNr,
-        tpr.pr.payload
-      ))
+        tpr.pr.payload))
     }).mapConcat(identity)
   }
 
   /**
-    * select  distinct persistenceId from akka where persistenceId is not null
-    */
+   * select  distinct persistenceId from akka where persistenceId is not null
+   */
   override def currentPersistenceIds(): Source[String, NotUsed] = {
 
     // this type works on the current queries we'd need to create a stage
@@ -197,8 +193,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
   }
   private def n1qlQuery(query: Statement): Source[AsyncN1qlQueryRow, NotUsed] = {
     Source.fromPublisher(RxReactiveStreams.toPublisher(
-      bucket.query(query).flatMap(toFunc1(results => results.rows()))
-    ))
+      bucket.query(query).flatMap(toFunc1(results => results.rows()))))
   }
 
   /*

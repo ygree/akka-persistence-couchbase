@@ -1,23 +1,27 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
 import akka.event.Logging
-import akka.persistence.journal.{AsyncWriteJournal, Tagged}
-import akka.persistence.{AtomicWrite, PersistentRepr}
-import akka.serialization.{Serialization, SerializationExtension, Serializers}
-import com.couchbase.client.java.document.{JsonDocument, JsonLongDocument}
-import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
+import akka.persistence.journal.{ AsyncWriteJournal, Tagged }
+import akka.persistence.{ AtomicWrite, PersistentRepr }
+import akka.serialization.{ Serialization, SerializationExtension, Serializers }
+import com.couchbase.client.java.document.{ JsonDocument, JsonLongDocument }
+import com.couchbase.client.java.document.json.{ JsonArray, JsonObject }
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.Sort._
-import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster, CouchbaseCluster}
+import com.couchbase.client.java.{ AsyncBucket, Bucket, Cluster, CouchbaseCluster }
 import com.typesafe.config.Config
-import rx.{Observable, Subscriber}
+import rx.{ Observable, Subscriber }
 
 import scala.collection.JavaConverters._
-import scala.collection.{immutable => im}
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.collection.{ immutable => im }
+import scala.concurrent.{ ExecutionContext, Future, Promise }
 import scala.util.Try
 import java.util.Base64
 
@@ -43,14 +47,13 @@ object CouchbaseJournal {
   }
 
   def extractEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization): PersistentRepr = {
-   val payload = Serialized.fromJsonObject(serialization, event)
-   val sequenceNr = event.getLong(Fields.SequenceNr)
+    val payload = Serialized.fromJsonObject(serialization, event)
+    val sequenceNr = event.getLong(Fields.SequenceNr)
     PersistentRepr(
       payload = payload,
       sequenceNr = sequenceNr,
       persistenceId = pid,
-      writerUuid = writerUuid
-    )
+      writerUuid = writerUuid)
   }
 
   def extractTaggedEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization): TaggedPersistentRepr = {
@@ -64,8 +67,7 @@ object CouchbaseJournal {
       payload = payload,
       sequenceNr = sequenceNr,
       persistenceId = pid,
-      writerUuid = writerUuid
-    ), tags.map(_.toString))
+      writerUuid = writerUuid), tags.map(_.toString))
   }
 
   object Fields {
@@ -123,7 +125,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
       val serialized: im.Seq[JsonObject] = aw.payload.map { msg =>
         val (event, tags) = msg.payload match {
           case t: Tagged => (t.payload.asInstanceOf[AnyRef], t.tags)
-          case other => (other.asInstanceOf[AnyRef], Set.empty)
+          case other     => (other.asInstanceOf[AnyRef], Set.empty)
         }
         allTags = allTags ++ tags
         val ser = Serialized.serialize(serialization, event)
@@ -144,7 +146,6 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
       (s"$pid-${aw.lowestSequenceNr}", insert)
     })
 
-
     val result = Future.sequence(inserts.map((jo: (String, JsonObject)) => {
       val p = Promise[Try[Unit]]()
       // TODO make persistTo configurable
@@ -154,7 +155,6 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         val withId = jo._2.put(Fields.Ordering, id.content())
         asyncBucket.insert(JsonDocument.create(jo._1, withId))
       }))
-
 
       write.single().subscribe(new Subscriber[JsonDocument]() {
         override def onCompleted(): Unit = p.tryComplete(Try(Try(())))
@@ -180,7 +180,6 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         .map(_ => ())
     }
   }
-
 
   // TODO use eventsByPersistenceId
   override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(recoveryCallback: PersistentRepr => Unit): Future[Unit] = {
@@ -235,8 +234,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
                 recoveryCallback(pr)
               }
             }
-          }
-        )
+          })
       done.future
     }
 
@@ -256,7 +254,6 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         .and(x(Fields.SequenceFrom).gte(fromSequenceNr)))
       .orderBy(desc(Fields.SequenceFrom))
       .limit(1)
-
 
     // Without this the index that gets the latest sequence nr may have not seen the last write of the last version
     // of this persistenceId. This seems overkill.

@@ -1,9 +1,13 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence
 
 import rx.functions.Func1
-import rx.{Observable, Subscriber}
+import rx.{ Observable, Subscriber }
 
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.{ Future, Promise }
 import scala.util.Try
 
 package object couchbase {
@@ -28,7 +32,6 @@ package object couchbase {
     })
     p.future
   }
-
 
   // 2.11 inference :(
   def toFunc1[A, B](f: A => B): Func1[A, B] = new Func1[A, B] {
