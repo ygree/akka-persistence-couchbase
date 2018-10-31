@@ -10,6 +10,8 @@ import akka.persistence.couchbase.CouchbaseJournal.{ Fields, TaggedPersistentRep
 import akka.persistence.query.scaladsl._
 import akka.persistence.query._
 import akka.serialization.{ Serialization, SerializationExtension }
+import akka.stream.alpakka.couchbase.impl.N1qlQueryStage
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.document.json.{ JsonArray, JsonObject }
@@ -48,7 +50,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
   private val settings = CouchbaseSettings(config)
   // FIXME, hosts from config
   private val cluster = CouchbaseCluster.create().authenticate(settings.username, settings.password)
-  private val bucket = cluster.openBucket(settings.bucket).async()
+  private val session = CouchbaseSession(cluster.openBucket(settings.bucket))
 
   as.registerOnTermination {
     cluster.disconnect()
@@ -182,18 +184,8 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     // this type works on the current queries we'd need to create a stage
     // to do the live queries
     // this can fail as it relies on async updates to the index.
-    val query = select(distinct(Fields.PersistenceId)).from("akka").where(x(Fields.PersistenceId).isNotNull)
-    n1qlQuery(query).map(row => row.value().getString(Fields.PersistenceId))
-  }
-
-  private def n1qlQuery(query: N1qlQuery): Source[AsyncN1qlQueryRow, NotUsed] = {
-    Source.fromPublisher(RxReactiveStreams.toPublisher({
-      bucket.query(query).flatMap(toFunc1(results => results.rows()))
-    }))
-  }
-  private def n1qlQuery(query: Statement): Source[AsyncN1qlQueryRow, NotUsed] = {
-    Source.fromPublisher(RxReactiveStreams.toPublisher(
-      bucket.query(query).flatMap(toFunc1(results => results.rows()))))
+    val query = select(distinct(Fields.PersistenceId)).from(settings.bucket).where(x(Fields.PersistenceId).isNotNull)
+    session.streamedQuery(query).map(row => row.value().getString(Fields.PersistenceId))
   }
 
   /*
