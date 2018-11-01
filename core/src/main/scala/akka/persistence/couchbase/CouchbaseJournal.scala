@@ -197,14 +197,13 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         .where(x(Fields.PersistenceId).eq(x("$1"))
           .and(x(Fields.SequenceFrom).gte(starting)
             .and(Fields.SequenceFrom).lte(toSequenceNr)))
-        .orderBy(desc(Fields.SequenceFrom))
 
       log.info("Query: " + replayQuery)
       val query = N1qlQuery.parameterized(replayQuery, JsonArray.from(persistenceId))
 
       val source =
-        if (max >= 0 && max != Long.MaxValue) couchbase.streamedQuery(query)
-        else couchbase.streamedQuery(query).take(max) // FIXME make sure this cancels the query
+        if (max >= 0 && max != Long.MaxValue) couchbase.streamedQuery(query).take(max) // FIXME make sure this cancels the query
+        else couchbase.streamedQuery(query)
 
       val done = source
         .runForeach(json =>

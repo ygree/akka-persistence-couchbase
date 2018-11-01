@@ -13,9 +13,9 @@ import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query.dsl.Expression._
-import com.couchbase.client.java.{Cluster, CouchbaseCluster}
+import com.couchbase.client.java.{ Cluster, CouchbaseCluster }
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpec}
+import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
 
 import scala.concurrent.duration._
 
