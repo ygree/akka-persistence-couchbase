@@ -1,5 +1,8 @@
-package akka.persistence.couchbase
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
 
+package akka.persistence.couchbase
 
 import scala.collection.immutable
 import akka.actor.Props

@@ -1,13 +1,17 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
-import akka.actor.{ActorRef, ActorSystem}
-import akka.persistence.query.{Offset, PersistenceQuery}
+import akka.actor.{ ActorRef, ActorSystem }
+import akka.persistence.query.{ Offset, PersistenceQuery }
 import akka.stream.ActorMaterializer
 import akka.stream.testkit.scaladsl.TestSink
-import akka.testkit.{ImplicitSender, TestKit}
+import akka.testkit.{ ImplicitSender, TestKit }
 import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.query.N1qlQuery
-import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
+import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpecLike }
 
 import scala.concurrent.duration._
 
@@ -27,7 +31,6 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
   }
 
   // TODO run this test with smaller pageSize, when that is configurable
-
 
   val noMsgTimeout = 100.millis
 
@@ -143,8 +146,7 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
         .expectNext(
           ("h", 1, Offset.sequence(1)),
           ("h", 2, Offset.sequence(2)),
-          ("h", 3, Offset.sequence(3))
-        )
+          ("h", 3, Offset.sequence(3)))
         .expectComplete()
     }
 
@@ -160,7 +162,6 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
         .expectNextN((11 to 20).map(i => s"i-$i"))
         .expectComplete()
     }
-
 
     "stop at last event in partition" in {
       setup("i2", 15) // partition size is 15
@@ -206,8 +207,8 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       val probe = src.map(_.event).runWith(TestSink.probe[Any])
         .request(queries.pageSize + 10)
 
-        probe.expectNextN(queries.pageSize) should === ((1 to queries.pageSize).map(n => s"a2-$n").toList)
-        probe.expectComplete()
+      probe.expectNextN(queries.pageSize) should ===((1 to queries.pageSize).map(n => s"a2-$n").toList)
+      probe.expectComplete()
     }
 
   }

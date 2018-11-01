@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
 import akka.persistence.CapabilityFlag
@@ -18,7 +22,7 @@ class CouchbaseJournalSpec extends JournalSpec(ConfigFactory.load()) {
   }
 
   override def supportsRejectingNonSerializableObjects: CapabilityFlag =
-    false// or CapabilityFlag.off
+    false // or CapabilityFlag.off
 
   override def supportsSerialization: CapabilityFlag =
     true // or CapabilityFlag.on

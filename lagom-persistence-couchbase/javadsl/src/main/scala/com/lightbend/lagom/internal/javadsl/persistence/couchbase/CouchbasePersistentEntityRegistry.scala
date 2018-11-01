@@ -1,8 +1,12 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package com.lightbend.lagom.internal.javadsl.persistence.couchbase
 
 import java.util.Optional
 
-import javax.inject.{Inject, Singleton}
+import javax.inject.{ Inject, Singleton }
 import akka.actor.ActorSystem
 import akka.event.Logging
 import akka.persistence.couchbase.CouchbaseReadJournal
@@ -10,10 +14,10 @@ import com.lightbend.lagom.internal.javadsl.persistence.AbstractPersistentEntity
 import play.api.inject.Injector
 
 /**
-  * Internal API
-  */
+ * Internal API
+ */
 @Singleton
-private[lagom] final class CouchbasePersistentEntityRegistry @Inject()(system: ActorSystem, injector: Injector)
+private[lagom] final class CouchbasePersistentEntityRegistry @Inject() (system: ActorSystem, injector: Injector)
   extends AbstractPersistentEntityRegistry(system, injector) {
 
   private val log = Logging.getLogger(system, getClass)

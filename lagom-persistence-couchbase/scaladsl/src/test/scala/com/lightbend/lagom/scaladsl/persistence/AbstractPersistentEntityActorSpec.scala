@@ -1,10 +1,10 @@
 /*
- * Copyright (C) 2016-2018 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
 package com.lightbend.lagom.scaladsl.persistence
 
-import akka.actor.{Actor, Props, UnhandledMessage}
+import akka.actor.{ Actor, Props, UnhandledMessage }
 import akka.cluster.sharding.ShardRegion
 import akka.testkit.TestProbe
 import com.lightbend.lagom.internal.scaladsl.persistence.PersistentEntityActor

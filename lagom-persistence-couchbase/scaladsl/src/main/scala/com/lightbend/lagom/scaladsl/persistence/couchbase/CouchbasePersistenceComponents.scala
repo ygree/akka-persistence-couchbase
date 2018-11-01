@@ -1,9 +1,8 @@
 /*
- * Copyright (C) 2016-2018 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
-
 
 import com.couchbase.client.java.AsyncBucket
 import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{ CouchbasePersistentEntityRegistry, CouchbaseReadSideImpl, ScaladslCouchbaseOffsetStore }

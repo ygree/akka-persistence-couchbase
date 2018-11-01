@@ -1,6 +1,10 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
-import akka.persistence.journal.{Tagged, WriteEventAdapter}
+import akka.persistence.journal.{ Tagged, WriteEventAdapter }
 
 class ColorFruitTagger extends WriteEventAdapter {
   val colors = Set("green", "black", "blue", "yellow", "pink")

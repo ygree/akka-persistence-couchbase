@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2018 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
 package com.lightbend.lagom.internal.scaladsl.persistence.couchbase
@@ -23,8 +23,7 @@ import scala.concurrent.{ ExecutionContext, Future }
 private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEvent[Event], Handler](
   session:    AsyncBucket,
   handlers:   Map[Class[_ <: Event], Handler],
-  dispatcher: String
-)(implicit ec: ExecutionContext) extends ReadSideHandler[Event] {
+  dispatcher: String)(implicit ec: ExecutionContext) extends ReadSideHandler[Event] {
 
   private val log = LoggerFactory.getLogger(this.getClass)
 
@@ -49,8 +48,7 @@ private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEve
             {
               if (log.isDebugEnabled()) log.debug("Unhandled event [{}]", eventClass.getName)
               CouchbaseAutoReadSideHandler.emptyHandler.asInstanceOf[Handler]
-            }
-          )
+            })
 
         invoke(handler, elem).flatMap(executeStatements)
 
@@ -73,15 +71,13 @@ private[couchbase] object CouchbaseAutoReadSideHandler {
  * Internal API
  */
 private[couchbase] final class CouchbaseAutoReadSideHandler[Event <: AggregateEvent[Event]](
-  session:               AsyncBucket,
-  offsetStore:           CouchbaseOffsetStore,
-  handlers:              Map[Class[_ <: Event], CouchbaseAutoReadSideHandler.Handler[Event]],
-  readProcessorId:       String,
-  dispatcher:            String
-)(implicit ec: ExecutionContext)
+  session:         AsyncBucket,
+  offsetStore:     CouchbaseOffsetStore,
+  handlers:        Map[Class[_ <: Event], CouchbaseAutoReadSideHandler.Handler[Event]],
+  readProcessorId: String,
+  dispatcher:      String)(implicit ec: ExecutionContext)
   extends CouchbaseReadSideHandler[Event, CouchbaseAutoReadSideHandler.Handler[Event]](
-    session, handlers, dispatcher
-  ) {
+    session, handlers, dispatcher) {
 
   import CouchbaseAutoReadSideHandler.Handler
 
@@ -98,7 +94,6 @@ private[couchbase] final class CouchbaseAutoReadSideHandler[Event <: AggregateEv
 
   protected def offsetStatement(offset: Offset): immutable.Seq[CouchbaseAction] =
     immutable.Seq(offsetDao.bindSaveOffset(offset))
-
 
   override def prepare(tag: AggregateEventTag[Event]): Future[Offset] = {
     for {

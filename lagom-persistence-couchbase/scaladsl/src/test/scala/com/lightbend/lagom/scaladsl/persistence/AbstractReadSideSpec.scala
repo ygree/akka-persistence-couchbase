@@ -1,5 +1,8 @@
-package com.lightbend.lagom.scaladsl.persistence
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
 
+package com.lightbend.lagom.scaladsl.persistence
 
 import akka.actor.{ Actor, ActorRef, Props, Status }
 import akka.pattern.pipe
@@ -37,8 +40,7 @@ trait AbstractReadSideSpec extends ImplicitSender with ScalaFutures with Eventua
 
   def eventStream[Event <: AggregateEvent[Event]](
     aggregateTag: AggregateEventTag[Event],
-    fromOffset:   Offset
-  ): Source[EventStreamElement[Event], NotUsed] =
+    fromOffset:   Offset): Source[EventStreamElement[Event], NotUsed] =
     persistentEntityRegistry.eventStream(aggregateTag, fromOffset)
 
   def processorFactory(): ReadSideProcessor[TestEntity.Evt]
@@ -58,9 +60,7 @@ trait AbstractReadSideSpec extends ImplicitSender with ScalaFutures with Eventua
         None,
         10.seconds,
         "",
-        ""
-      )
-    )
+        ""))
   }
 
   class Mock(inFailureMode: Boolean = false) extends Actor {
@@ -110,8 +110,7 @@ trait AbstractReadSideSpec extends ImplicitSender with ScalaFutures with Eventua
       classOf[TestEntity.Evt],
       new ClusterStartupTask(mockRef),
       eventStream,
-      () => processorFactory()
-    )
+      () => processorFactory())
 
     val readSide: ActorRef = system.actorOf(processorProps)
 

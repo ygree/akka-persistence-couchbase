@@ -1,20 +1,20 @@
 /*
- * Copyright (C) 2016-2018 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
 package com.lightbend.lagom.internal.persistence.couchbase
 
 import akka.Done
 import akka.actor.ActorSystem
-import akka.persistence.query.{NoOffset, Offset, Sequence, TimeBasedUUID}
-import com.couchbase.client.java.{AsyncBucket, CouchbaseCluster}
+import akka.persistence.query.{ NoOffset, Offset, Sequence, TimeBasedUUID }
+import com.couchbase.client.java.{ AsyncBucket, CouchbaseCluster }
 import com.lightbend.lagom.internal.persistence.ReadSideConfig
-import com.lightbend.lagom.spi.persistence.{OffsetDao, OffsetStore}
+import com.lightbend.lagom.spi.persistence.{ OffsetDao, OffsetStore }
 import akka.persistence.couchbase._
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ ExecutionContext, Future }
 
 private[lagom] object CouchbaseOffset {
   def offsetKey(eventProcessorId: String, tag: String): String = s"$eventProcessorId-$tag"
@@ -29,8 +29,7 @@ private[lagom] object CouchbaseOffset {
 private[lagom] abstract class CouchbaseOffsetStore(
   system:  ActorSystem,
   config:  ReadSideConfig,
-  session: AsyncBucket
-) extends OffsetStore {
+  session: AsyncBucket) extends OffsetStore {
 
   import system.dispatcher
 
@@ -58,8 +57,8 @@ private[lagom] final class CouchbaseOffsetDao(session: AsyncBucket, eventProcess
 
   def bindSaveOffset(offset: Offset): CouchbaseAction = {
     offset match {
-      case NoOffset            => (ab: AsyncBucket, ec: ExecutionContext) => Future.successful(Done)
-      case seq: Sequence       => (ab: AsyncBucket, ec: ExecutionContext) => {
+      case NoOffset => (ab: AsyncBucket, ec: ExecutionContext) => Future.successful(Done)
+      case seq: Sequence => (ab: AsyncBucket, ec: ExecutionContext) => {
         val id = CouchbaseOffset.offsetKey(eventProcessorId, tag)
         singleObservableToFuture(ab.upsert(JsonDocument.create(id, JsonObject.create().put("sequenceOffset", seq.value))))
           .map(_ => Done)(ec)
