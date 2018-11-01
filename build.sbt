@@ -51,7 +51,7 @@ lazy val root = (project in file("."))
     publishTo := Some(Resolver.file("Unused transient repository", file("target/unusedrepo"))),
     publish := {}
   )
-  .aggregate(core)
+  .aggregate((lagomModules ++ Seq(core)).map(Project.projectToRef): _*)
 
 lazy val core = (project in file("core"))
   .enablePlugins(AutomateHeaderPlugin)
@@ -60,6 +60,12 @@ lazy val core = (project in file("core"))
     name := "akka-persistence-couchbase",
     libraryDependencies := Dependencies.core
   )
+
+lazy val lagomModules = Seq[Project](
+  `lagom-persistence-couchbase-core`,
+  `lagom-persistence-couchbase-javadsl`,
+  `lagom-persistence-couchbase-scaladsl`
+)
 
 lazy val `lagom-persistence-couchbase-core` = (project in file("lagom-persistence-couchbase/core"))
   .dependsOn(core % "compile;test->test")
