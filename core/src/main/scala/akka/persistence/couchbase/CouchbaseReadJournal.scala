@@ -10,7 +10,6 @@ import akka.persistence.couchbase.CouchbaseJournal.{ Fields, TaggedPersistentRep
 import akka.persistence.query.scaladsl._
 import akka.persistence.query._
 import akka.serialization.{ Serialization, SerializationExtension }
-import akka.stream.alpakka.couchbase.impl.N1qlQueryStage
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.CouchbaseCluster
@@ -50,7 +49,9 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
   private val settings = CouchbaseSettings(config)
   // FIXME, hosts from config
   private val cluster = CouchbaseCluster.create().authenticate(settings.username, settings.password)
-  private val session = CouchbaseSession(cluster.openBucket(settings.bucket))
+  private val bucket = cluster.openBucket(settings.bucket)
+  private val asyncBucket = bucket.async()
+  private val session = CouchbaseSession(bucket)
 
   as.registerOnTermination {
     cluster.disconnect()
@@ -101,7 +102,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
       pageSize,
       N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
       params,
-      bucket,
+      asyncBucket,
       EventsByPersistenceIdState(fromSequenceNr, 0),
       state => {
         if (state.to >= toSequenceNr)
@@ -146,7 +147,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
       live,
       pageSize,
       N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, initialOrdering), queryParams),
-      params, bucket, initialOrdering,
+      params, asyncBucket, initialOrdering,
       ordering => Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),
       (_, row) => row.value().getObject("akka").getLong(Fields.Ordering) + 1)).mapMaterializedValue(_ => NotUsed), tag)
   }
@@ -185,7 +186,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     // to do the live queries
     // this can fail as it relies on async updates to the index.
     val query = select(distinct(Fields.PersistenceId)).from(settings.bucket).where(x(Fields.PersistenceId).isNotNull)
-    session.streamedQuery(query).map(row => row.value().getString(Fields.PersistenceId))
+    session.streamedQuery(query).map(_.getString(Fields.PersistenceId))
   }
 
   /*

@@ -6,23 +6,25 @@ package akka.stream.alpakka.couchbase
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
-import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit
 import com.couchbase.client.java.bucket.BucketType
 import com.couchbase.client.java.cluster.DefaultBucketSettings
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
-import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.Select.select
-import com.couchbase.client.java.{ Cluster, CouchbaseAsyncBucket, CouchbaseBucket, CouchbaseCluster }
+import com.couchbase.client.java.query.dsl.Expression._
+import com.couchbase.client.java.{Cluster, CouchbaseCluster}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{ BeforeAndAfterAll, FlatSpec, Matchers, WordSpec }
+import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpec}
 
 import scala.concurrent.duration._
 
 class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with BeforeAndAfterAll {
 
-  override implicit def patienceConfig: PatienceConfig = PatienceConfig(5.seconds)
+  // FIXME use a automagic docker-couchbase
+  // currently requires a running couchbase with an admin account named 'admin' with password 'admin1'
+
+  override implicit def patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 150.millis)
 
   private implicit val system = ActorSystem("CouchbaseSessionSpec")
   private implicit val materializer = ActorMaterializer()
@@ -48,7 +50,7 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
   }
   private val bucket = cluster.openBucket(bucketName)
   bucket.bucketManager().createN1qlIndex("intvals", true, false, "intVal")
-  val session = new CouchbaseSession(cluster.openBucket(bucketName))
+  val session = CouchbaseSession(cluster.openBucket(bucketName))
 
   "The couchbase session" should {
 
@@ -56,10 +58,12 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       val insertObject = JsonObject.create()
       insertObject.put("intVal", 1)
 
-      session.insert(
+      val inserted = session.insert(
         JsonDocument.create(
           "one",
           insertObject)).futureValue
+      inserted.id() should ===("one")
+      inserted.content().getInt("intVal") should ===(1)
 
       val getResult = session.get("one").futureValue
       getResult should not be empty
@@ -84,17 +88,32 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       val queryObject = queryResult.get.getObject(bucketName)
       queryObject.getInt("intVal") should be(3)
       queryObject.getString("stringVal") should be("whoa")
+
+      session.remove("one").futureValue
+
+    }
+
+    "upsert a missing document" in {
+      val upsertObject = JsonObject.create()
+      upsertObject.put("intVal", 5)
+      upsertObject.put("stringVal", "whoa")
+
+      session.upsert(JsonDocument.create("upsert-missing", upsertObject)).futureValue
+      val persisted = session.get("upsert-missing").futureValue
+      persisted should not be empty
+      persisted.get.content().getInt("intVal") should ===(5)
     }
 
     "allow for counters" in {
       val v1 = session.counter("c1", 1, 0).futureValue
       val v2 = session.counter("c1", 1, 0).futureValue
-      v1.content() should ===(0L) // starts at 0
-      v2.content() should ===(1L)
+      v1 should ===(0L) // starts at 0
+      v2 should ===(1L)
     }
   }
 
   override protected def afterAll(): Unit = {
+    cluster.clusterManager().removeBucket(bucketName)
     session.close().futureValue
     cluster.disconnect()
     TestKit.shutdownActorSystem(system)

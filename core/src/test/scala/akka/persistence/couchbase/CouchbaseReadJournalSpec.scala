@@ -18,17 +18,10 @@ import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpec
 import scala.concurrent.duration._
 
 class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournalSpec"))
-  with WordSpecLike with BeforeAndAfterAll with Matchers with BeforeAndAfterEach {
-
-  override protected def beforeAll(): Unit = {
-    super.beforeAll()
-    CouchbaseCluster.create()
-      .authenticate("admin", "admin1")
-      .openBucket("akka")
-      .query(N1qlQuery.simple("delete from akka"))
-  }
+  with WordSpecLike with BeforeAndAfterAll with Matchers with CouchbaseBucketSetup with BeforeAndAfterEach {
 
   protected override def afterAll(): Unit = {
+    super.afterAll()
     shutdown(system)
   }
 

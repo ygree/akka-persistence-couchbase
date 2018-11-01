@@ -10,16 +10,7 @@ import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.query.N1qlQuery
 import com.typesafe.config.ConfigFactory
 
-class CouchbaseJournalSpec extends JournalSpec(ConfigFactory.load()) {
-
-  protected override def beforeAll(): Unit = {
-    // FIXME, use a global connection / get it from the journal
-    super.beforeAll()
-    CouchbaseCluster.create()
-      .authenticate("admin", "admin1")
-      .openBucket("akka")
-      .query(N1qlQuery.simple("delete from akka"))
-  }
+class CouchbaseJournalSpec extends JournalSpec(ConfigFactory.load()) with CouchbaseBucketSetup {
 
   override def supportsRejectingNonSerializableObjects: CapabilityFlag =
     false // or CapabilityFlag.off

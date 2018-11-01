@@ -54,6 +54,8 @@ final class CouchbaseWriteSettings private (
 
 object CouchbaseWriteSettings {
 
+  val default = apply()
+
   def apply(
     parallelism: Int                           = 1,
     replicateTo: ReplicateTo                   = ReplicateTo.ONE,
@@ -64,52 +66,4 @@ object CouchbaseWriteSettings {
 
   def create(): CouchbaseWriteSettings = CouchbaseWriteSettings()
 
-}
-
-final class FailedOperation private (val id: String, val ex: Throwable) {
-
-  override def equals(other: Any): Boolean = other match {
-    case that: FailedOperation =>
-      id == that.id &&
-        ex == that.ex
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    val state = Seq(id, ex)
-    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
-  }
-}
-
-object FailedOperation {
-
-  /** Scala API */
-  @InternalApi
-  private[couchbase] def apply(id: String, ex: Throwable) = new FailedOperation(id = id, ex = ex)
-
-  /** Java API */
-  @InternalApi
-  private[couchbase] def create(id: String, ex: Throwable) = new FailedOperation(id = id, ex = ex)
-}
-
-final case class SingleOperationResult[T](entity: T, result: Try[String]) {
-
-  /** Java API */
-  def getEntity: T = entity
-
-  /** Java API */
-  def getException: Optional[Throwable] =
-    result match {
-      case Failure(ex) => Optional.of(ex)
-      case Success(_)  => Optional.empty()
-    }
-}
-
-final case class BulkOperationResult[T](entities: Seq[T], failures: Seq[FailedOperation] = Seq[FailedOperation]()) {
-
-  /** Java API */
-  def getEntities: java.util.List[T] = entities.asJava
-
-  /** Java API */
-  def getFailures: java.util.List[FailedOperation] = failures.asJava
 }

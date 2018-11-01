@@ -2,8 +2,9 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package akka.stream.alpakka.couchbase.impl
+package akka.persistence.couchbase
 
+import akka.stream.alpakka.couchbase.impl.RxUtilities
 import akka.stream.stage._
 import akka.stream.{ Attributes, Outlet, SourceShape }
 import com.couchbase.client.java.AsyncBucket
@@ -23,8 +24,14 @@ object N1qlQueryStage {
   final case object IdleAfterFullPage extends InternalState
   final case object Querying extends InternalState
 
+  val unfoldRows = new Func1[AsyncN1qlQueryResult, Observable[AsyncN1qlQueryRow]] {
+    def call(t: AsyncN1qlQueryResult): Observable[AsyncN1qlQueryRow] =
+      t.rows()
+  }
+
 }
 
+// FIXME is this general enough that we can put it in the connector?
 // TODO pagination
 class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, namedParams: JsonObject, bucket: AsyncBucket,
                         initialState: S, nextQuery: S => Option[N1qlQuery], updateState: (S, AsyncN1qlQueryRow) => S)
@@ -122,7 +129,7 @@ class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, n
       state = Querying
       // FIXME deal with initial errors
       // FIXME passing a chunk across the async callback seems better than unfolding first?
-      bucket.query(query).flatMap(RxUtilities.unfoldRows).subscribe(new Subscriber[AsyncN1qlQueryRow]() {
+      bucket.query(query).flatMap(N1qlQueryStage.unfoldRows).subscribe(new Subscriber[AsyncN1qlQueryRow]() {
         override def onCompleted(): Unit = completeCb.invoke(())
         override def onError(t: Throwable): Unit = failedCb.invoke(t)
         override def onNext(row: AsyncN1qlQueryRow): Unit = newRowCb.invoke(row)

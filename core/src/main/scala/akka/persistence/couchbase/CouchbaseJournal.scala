@@ -22,7 +22,7 @@ import rx.{ Observable, Subscriber }
 import scala.collection.JavaConverters._
 import scala.collection.{ immutable => im }
 import scala.concurrent.{ ExecutionContext, Future, Promise }
-import scala.util.{ Failure, Try }
+import scala.util.{ Failure, Success, Try }
 import java.util.Base64
 
 import akka.Done
@@ -104,9 +104,10 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
   private val log = Logging(this)
   private val serialization: Serialization = SerializationExtension(context.system)
 
-  private val config: CouchbaseSettings = CouchbaseSettings(c)
   private implicit val materializer = ActorMaterializer() // FIXME keeping our own rather than reusing another one?
 
+  // FIXME move connect logic to connector/client?
+  private val config: CouchbaseSettings = CouchbaseSettings(c)
   private val cluster: Cluster = {
     val c = CouchbaseCluster.create()
     log.info("Auth {} {}", config.username, config.password)
@@ -114,10 +115,10 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     c
   }
 
-  val couchbase = new CouchbaseSession(cluster.openBucket(config.bucket))
+  val couchbase = CouchbaseSession(cluster.openBucket(config.bucket))
 
   override def postStop(): Unit = {
-    cluster.disconnect()
+    couchbase.close()
   }
 
   override def asyncWriteMessages(messages: im.Seq[AtomicWrite]): Future[im.Seq[Try[Unit]]] = {
@@ -150,14 +151,15 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
       (s"$pid-${aw.lowestSequenceNr}", insert)
     })
 
+    // FIXME sequence will fail entire future rather than individual write
     Future.sequence(inserts.map((jo: (String, JsonObject)) => {
       val p = Promise[Try[Unit]]()
       // TODO make persistTo configurable
       couchbase.counter(config.bucket, 1, 0).flatMap { id =>
-        val withId = jo._2.put(Fields.Ordering, id.content())
+        val withId = jo._2.put(Fields.Ordering, id)
         couchbase.insert(JsonDocument.create(jo._1, withId))
       }
-    }))
+    })).map(writes => writes.map(_ => Success(())))
   }
 
   override def asyncDeleteMessagesTo(persistenceId: String, toSequenceNr: Long): Future[Unit] = {
@@ -197,6 +199,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         .where(x(Fields.PersistenceId).eq(x("$1"))
           .and(x(Fields.SequenceFrom).gte(starting)
             .and(Fields.SequenceFrom).lte(toSequenceNr)))
+        .orderBy(desc(Fields.SequenceFrom))
 
       log.info("Query: " + replayQuery)
       val query = N1qlQuery.parameterized(replayQuery, JsonArray.from(persistenceId))
@@ -211,9 +214,9 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
             recoveryCallback(pr)
           })
 
-      // FIXME just to see errors in development
       done.onComplete {
         case Failure(ex) =>
+          // FIXME this is just to see errors in development?
           ex.printStackTrace(System.out)
         case _ =>
       }
@@ -250,7 +253,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
           log.info("sequence nr: {}", jsonObj)
           jsonObj.getLong("sequence_to")
         case None =>
-          throw new IllegalStateException(s"No entry for $highestSequenceNrQuery")
+          0L
       }
   }
 }

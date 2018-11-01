@@ -16,17 +16,10 @@ import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpecLike }
 import scala.concurrent.duration._
 
 class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistenceIdSpec"))
-  with WordSpecLike with BeforeAndAfterAll with Matchers with ImplicitSender {
-
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    CouchbaseCluster.create()
-      .authenticate("admin", "admin1")
-      .openBucket("akka")
-      .query(N1qlQuery.simple("delete from akka"))
-  }
+  with WordSpecLike with BeforeAndAfterAll with Matchers with ImplicitSender with CouchbaseBucketSetup {
 
   protected override def afterAll(): Unit = {
+    super.afterAll()
     shutdown(system)
   }
 
