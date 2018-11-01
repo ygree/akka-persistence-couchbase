@@ -10,12 +10,12 @@ import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import akka.{ Done, NotUsed }
 import com.couchbase.client.java.Bucket
+import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
-import com.couchbase.client.java.document.{ JsonDocument, JsonLongDocument }
 import com.couchbase.client.java.query.{ N1qlQuery, Statement }
-import rx.{ RxReactiveStreams, Subscriber }
+import rx.RxReactiveStreams
 
-import scala.concurrent.{ Future, Promise }
+import scala.concurrent.Future
 
 /**
  * InternalAPI

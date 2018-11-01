@@ -4,7 +4,6 @@
 
 package akka.persistence.couchbase
 
-import akka.stream.alpakka.couchbase.impl.RxUtilities
 import akka.stream.stage._
 import akka.stream.{ Attributes, Outlet, SourceShape }
 import com.couchbase.client.java.AsyncBucket

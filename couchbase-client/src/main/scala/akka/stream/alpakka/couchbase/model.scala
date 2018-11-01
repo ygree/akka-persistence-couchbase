@@ -3,14 +3,7 @@
  */
 package akka.stream.alpakka.couchbase
 
-import java.util.Optional
-
-import akka.annotation.InternalApi
 import com.couchbase.client.java.{ PersistTo, ReplicateTo }
-
-import scala.util.{ Failure, Success, Try }
-import scala.collection.JavaConverters._
-import scala.collection.immutable.Seq
 
 final class CouchbaseWriteSettings private (
   val parallelism: Int,

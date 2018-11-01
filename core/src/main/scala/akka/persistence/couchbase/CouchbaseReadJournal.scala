@@ -7,22 +7,20 @@ package akka.persistence.couchbase
 import akka.NotUsed
 import akka.actor.ExtendedActorSystem
 import akka.persistence.couchbase.CouchbaseJournal.{ Fields, TaggedPersistentRepr, deserialize, extractTaggedEvent }
-import akka.persistence.query.scaladsl._
 import akka.persistence.query._
+import akka.persistence.query.scaladsl._
 import akka.serialization.{ Serialization, SerializationExtension }
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.CouchbaseCluster
-import com.couchbase.client.java.document.json.{ JsonArray, JsonObject }
+import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
 import com.typesafe.config.Config
-import rx.{ Observable, RxReactiveStreams }
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
 
 object CouchbaseReadJournal {

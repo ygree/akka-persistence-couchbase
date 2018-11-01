@@ -9,8 +9,8 @@ import akka.stream.alpakka.couchbase.impl.CouchbaseSessionImpl
 import akka.stream.scaladsl.Source
 import akka.{ Done, NotUsed }
 import com.couchbase.client.java.Bucket
+import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
-import com.couchbase.client.java.document.{ JsonDocument, JsonLongDocument }
 import com.couchbase.client.java.query._
 
 import scala.concurrent.Future

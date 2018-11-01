@@ -4,11 +4,11 @@
 
 package com.lightbend.lagom.internal.javadsl.persistence.couchbase
 
-import javax.inject.{ Inject, Singleton }
 import akka.actor.ActorSystem
-import com.couchbase.client.java.AsyncBucket
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.lightbend.lagom.internal.persistence.ReadSideConfig
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
+import javax.inject.{ Inject, Singleton }
 
 import scala.concurrent.ExecutionContext
 
@@ -18,6 +18,6 @@ import scala.concurrent.ExecutionContext
 @Singleton
 private[lagom] final class JavadslCouchbaseOffsetStore @Inject() (
   system:  ActorSystem,
-  session: AsyncBucket,
+  session: CouchbaseSession,
   config:  ReadSideConfig)(implicit ec: ExecutionContext)
   extends CouchbaseOffsetStore(system, config, session)

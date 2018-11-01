@@ -4,10 +4,9 @@
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
-import akka.Done
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseAction
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
-import com.lightbend.lagom.scaladsl.persistence.{ AggregateEvent, AggregateEventTag, EventStreamElement }
+import com.lightbend.lagom.scaladsl.persistence.{ AggregateEvent, EventStreamElement }
 
 import scala.collection.immutable
 import scala.concurrent.Future

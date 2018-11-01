@@ -4,32 +4,30 @@
 
 package akka.persistence.couchbase
 
+import java.util.Base64
+
+import akka.dispatch.ExecutionContexts
 import akka.event.Logging
+import akka.persistence.couchbase.CouchbaseJournal.Fields
 import akka.persistence.journal.{ AsyncWriteJournal, Tagged }
 import akka.persistence.{ AtomicWrite, PersistentRepr }
-import akka.serialization.{ Serialization, SerializationExtension, Serializers }
-import com.couchbase.client.java.document.{ JsonDocument, JsonLongDocument }
+import akka.serialization.{ Serialization, SerializationExtension }
+import akka.stream.ActorMaterializer
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{ JsonArray, JsonObject }
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.Sort._
-import com.couchbase.client.java.{ AsyncBucket, Bucket, Cluster, CouchbaseCluster }
+import com.couchbase.client.java.{ Cluster, CouchbaseCluster }
 import com.typesafe.config.Config
-import rx.{ Observable, Subscriber }
 
 import scala.collection.JavaConverters._
 import scala.collection.{ immutable => im }
 import scala.concurrent.{ ExecutionContext, Future, Promise }
 import scala.util.{ Failure, Success, Try }
-import java.util.Base64
-
-import akka.Done
-import akka.dispatch.ExecutionContexts
-import akka.persistence.couchbase.CouchbaseJournal.Fields
-import akka.stream.ActorMaterializer
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 
 object CouchbaseJournal {
 

@@ -5,27 +5,11 @@
 package com.lightbend.lagom.javadsl.persistence.couchbase
 
 import java.net.URI
-import java.{ lang, util }
-import java.util.concurrent.TimeUnit
 
 import akka.actor.ActorSystem
 import akka.persistence.couchbase.CouchbaseSettings
-import com.couchbase.client.core.ClusterFacade
-import com.couchbase.client.core.message.internal.PingReport
-import com.couchbase.client.core.service.ServiceType
-import com.couchbase.client.java.analytics.{ AnalyticsQuery, AsyncAnalyticsQueryResult }
-import com.couchbase.client.java.bucket.AsyncBucketManager
-import com.couchbase.client.java.datastructures.MutationOptionBuilder
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java._
-import com.couchbase.client.java.document.{ Document, JsonDocument, JsonLongDocument }
-import com.couchbase.client.java.env.CouchbaseEnvironment
-import com.couchbase.client.java.query.{ AsyncN1qlQueryResult, N1qlQuery, Statement }
-import com.couchbase.client.java.repository.AsyncRepository
-import com.couchbase.client.java.search.SearchQuery
-import com.couchbase.client.java.search.result.AsyncSearchQueryResult
-import com.couchbase.client.java.subdoc.{ AsyncLookupInBuilder, AsyncMutateInBuilder }
-import com.couchbase.client.java.transcoder.subdoc.FragmentTranscoder
-import com.couchbase.client.java.view.{ AsyncSpatialViewResult, AsyncViewResult, SpatialViewQuery, ViewQuery }
 import com.google.inject.Provider
 import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{ CouchbasePersistentEntityRegistry, JavadslCouchbaseOffsetStore }
 import com.lightbend.lagom.internal.persistence.couchbase.{ ServiceLocatorAdapter, ServiceLocatorHolder }
@@ -37,9 +21,8 @@ import javax.annotation.PostConstruct
 import javax.inject.Inject
 import play.api.inject.{ Binding, Injector, Module }
 import play.api.{ Configuration, Environment }
-import rx.{ Observable, Single }
 
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.Future
 import scala.util.Try
 
 /**
@@ -56,12 +39,12 @@ class CouchbasePersistenceModule extends Module {
     //    bind[CassandraReadSideSettings].toSelf,
     //    bind[CassandraOffsetStore].to[JavadslCassandraOffsetStore],
     bind[OffsetStore].to(bind[JavadslCouchbaseOffsetStore]),
-    bind[AsyncBucket].toProvider[AsyncBucketProvider] //TODO:
+    bind[CouchbaseSession].toProvider[CouchbaseSessionProvider] //TODO:
   )
 
 }
 
-private[lagom] class AsyncBucketProvider @Inject() (cfg: Config) extends Provider[AsyncBucket] {
+private[lagom] class CouchbaseSessionProvider @Inject() (cfg: Config) extends Provider[CouchbaseSession] {
   private val config: CouchbaseSettings = CouchbaseSettings(cfg)
   //  private implicit val ec: ExecutionContext = context.dispatcher
 
@@ -72,12 +55,11 @@ private[lagom] class AsyncBucketProvider @Inject() (cfg: Config) extends Provide
     c
   }
 
-  val bucket: Bucket = cluster.openBucket(config.bucket)
-  val asyncBucket: AsyncBucket = cluster.openBucket(config.bucket).async()
+  val session = CouchbaseSession(cluster.openBucket(config.bucket))
 
-  override def get(): AsyncBucket = {
+  override def get(): CouchbaseSession = {
     //TODO:
-    asyncBucket
+    session
   }
 }
 
