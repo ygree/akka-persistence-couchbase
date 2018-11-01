@@ -1,5 +1,5 @@
 import com.typesafe.sbt.SbtScalariform.ScalariformKeys
-import sbt.Keys.publishArtifact
+import sbt.Keys.{name, publishArtifact}
 
 crossScalaVersions := Seq("2.12.6", "2.11.12")
 
@@ -51,7 +51,7 @@ lazy val root = (project in file("."))
     publishTo := Some(Resolver.file("Unused transient repository", file("target/unusedrepo"))),
     publish := {}
   )
-  .aggregate(core)
+  .aggregate((lagomModules ++ Seq(core)).map(Project.projectToRef): _*)
 
 lazy val core = (project in file("core"))
   .enablePlugins(AutomateHeaderPlugin)
@@ -61,7 +61,44 @@ lazy val core = (project in file("core"))
     libraryDependencies := Dependencies.core
   )
 
+lazy val lagomModules = Seq[Project](
+  `lagom-persistence-couchbase-core`,
+  `lagom-persistence-couchbase-javadsl`,
+  `lagom-persistence-couchbase-scaladsl`
+)
 
+lazy val `lagom-persistence-couchbase-core` = (project in file("lagom-persistence-couchbase/core"))
+  .dependsOn(core % "compile;test->test")
+  .settings(common)
+  .enablePlugins(AutomateHeaderPlugin)
+  .settings(
+    name := "lagom-persistence-couchbase-core",
+    libraryDependencies := Dependencies.`lagom-persistence-couchbase-core`
+  )
+
+lazy val `lagom-persistence-couchbase-javadsl` = (project in file("lagom-persistence-couchbase/javadsl"))
+  .dependsOn(
+    core % "compile;test->test",
+    `lagom-persistence-couchbase-core` % "compile;test->test"
+  )
+  .settings(common)
+  .enablePlugins(AutomateHeaderPlugin)
+  .settings(
+    name := "lagom-javadsl-persistence-couchbase",
+    libraryDependencies := Dependencies.`lagom-persistence-couchbase-javadsl`
+  )
+
+lazy val `lagom-persistence-couchbase-scaladsl` = (project in file("lagom-persistence-couchbase/scaladsl"))
+  .dependsOn(
+    core % "compile;test->test",
+    `lagom-persistence-couchbase-core` % "compile;test->test"
+  )
+  .settings(common)
+  .enablePlugins(AutomateHeaderPlugin)
+  .settings(
+    name := "lagom-scaladsl-persistence-couchbase",
+    libraryDependencies := Dependencies.`lagom-persistence-couchbase-scaladsl`
+  )
 
 def formattingPreferences = {
   import scalariform.formatter.preferences._
