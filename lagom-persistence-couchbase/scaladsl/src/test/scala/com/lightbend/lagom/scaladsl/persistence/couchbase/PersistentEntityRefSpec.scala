@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2018 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
@@ -7,30 +7,30 @@ package com.lightbend.lagom.scaladsl.persistence.couchbase
 import java.io.File
 
 import akka.actor.setup.ActorSystemSetup
-import akka.actor.{ActorSystem, BootstrapSetup}
+import akka.actor.{ ActorSystem, BootstrapSetup }
 import akka.cluster.Cluster
 import akka.pattern.AskTimeoutException
-import akka.stream.{ActorMaterializer, Materializer}
+import akka.stream.{ ActorMaterializer, Materializer }
 import akka.testkit.TestKit
 import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.query.N1qlQuery
 import com.lightbend.lagom.internal.persistence.testkit.AwaitPersistenceInit.awaitPersistenceInit
 import com.lightbend.lagom.scaladsl.api.ServiceLocator
 import com.lightbend.lagom.scaladsl.api.ServiceLocator.NoServiceLocator
-import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.{InvalidCommandException, UnhandledCommandException}
+import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.{ InvalidCommandException, UnhandledCommandException }
 import com.lightbend.lagom.scaladsl.persistence.TestEntity.Mode
-import com.lightbend.lagom.scaladsl.persistence.{PersistentEntity, PersistentEntityRegistry, TestEntity, TestEntitySerializerRegistry}
+import com.lightbend.lagom.scaladsl.persistence.{ PersistentEntity, PersistentEntityRegistry, TestEntity, TestEntitySerializerRegistry }
 import com.lightbend.lagom.scaladsl.playjson.JsonSerializerRegistry
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.{ Config, ConfigFactory }
 import org.scalactic.TypeCheckedTripleEquals
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
-import play.api.{Environment, Mode => PlayMode}
+import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpecLike }
+import play.api.{ Environment, Mode => PlayMode }
 import com.lightbend.lagom.internal.persistence.testkit.PersistenceTestConfig._
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ ExecutionContext, Future }
 
 class PersistentEntityRefSpec extends WordSpecLike with Matchers with BeforeAndAfterAll with ScalaFutures with TypeCheckedTripleEquals {
 
@@ -47,8 +47,7 @@ class PersistentEntityRefSpec extends WordSpecLike with Matchers with BeforeAndA
 
   private val system: ActorSystem = ActorSystem("PersistentEntityRefSpec", ActorSystemSetup(
     BootstrapSetup(config),
-    JsonSerializerRegistry.serializationSetupFor(TestEntitySerializerRegistry)
-  ))
+    JsonSerializerRegistry.serializationSetupFor(TestEntitySerializerRegistry)))
 
   override def beforeAll(): Unit = {
     super.beforeAll()

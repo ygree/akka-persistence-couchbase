@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
 import java.util.concurrent.TimeUnit
@@ -19,7 +23,6 @@ object DcpSpike extends App {
     .bucket("akka")
     .build()
 
-
   client.controlEventHandler(new ControlEventHandler {
     override def onEvent(flowController: ChannelFlowController, event: ByteBuf): Unit = {
       println(s"$flowController $event")
@@ -32,11 +35,9 @@ object DcpSpike extends App {
       if (DcpMutationMessage.is(event)) {
         println("Mutation: " + DcpMutationMessage.toString(event))
         println(DcpMutationMessage.content(event).toString(CharsetUtil.UTF_8))
-      }
-      else if (DcpDeletionMessage.is(event)) {
-//        System.out.println("Deletion: " + DcpDeletionMessage.toString(event))
-      }
-      else {
+      } else if (DcpDeletionMessage.is(event)) {
+        //        System.out.println("Deletion: " + DcpDeletionMessage.toString(event))
+      } else {
         println("Got: " + flowController + " " + event)
       }
       event.release()

@@ -1,16 +1,16 @@
 /*
- * Copyright (C) 2016-2018 Lightbend Inc. <https://www.lightbend.com>
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
 import com.couchbase.client.java.query.N1qlQuery
-import com.couchbase.client.java.{AsyncBucket, Cluster, CouchbaseCluster}
+import com.couchbase.client.java.{ AsyncBucket, Cluster, CouchbaseCluster }
 import com.lightbend.lagom.internal.persistence.ReadSideConfig
-import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{CouchbasePersistentEntityRegistry, CouchbaseReadSideImpl, ScaladslCouchbaseOffsetStore}
+import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{ CouchbasePersistentEntityRegistry, CouchbaseReadSideImpl, ScaladslCouchbaseOffsetStore }
 import com.lightbend.lagom.scaladsl.persistence.TestEntity.Evt
 import com.lightbend.lagom.scaladsl.persistence._
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.{ Config, ConfigFactory }
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -43,7 +43,7 @@ class CouchbaseReadSideSpec extends CouchbasePersistenceSpec(CouchbaseReadSideSp
     super.afterAll()
   }
 
-  override def beforeAll(): Unit =  {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     // FIXME, use a global connection / get it from the journal
     CouchbaseCluster.create()

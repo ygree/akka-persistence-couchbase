@@ -1,5 +1,8 @@
-package com.lightbend.lagom.scaladsl.persistence
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
 
+package com.lightbend.lagom.scaladsl.persistence
 
 import akka.actor.ActorRef
 import akka.actor.ActorSystem
@@ -23,8 +26,7 @@ object TestEntity {
       }, Writes[Mode] {
         case Mode.Append  => JsString("append")
         case Mode.Prepend => JsString("prepend")
-      }
-    )
+      })
   }
 
   object Cmd {
@@ -39,8 +41,7 @@ object TestEntity {
       JsonSerializer(emptySingletonFormat(UndefinedCmd)),
       JsonSerializer(emptySingletonFormat(UnhandledEvtCmd)),
       JsonSerializer(emptySingletonFormat(GetAddress)),
-      JsonSerializer(emptySingletonFormat(Clear))
-    )
+      JsonSerializer(emptySingletonFormat(Clear)))
 
   }
 
@@ -82,8 +83,7 @@ object TestEntity {
       JsonSerializer(emptySingletonFormat(InPrependMode)),
       JsonSerializer(emptySingletonFormat(InAppendMode)),
       JsonSerializer(emptySingletonFormat(Unhandled)),
-      JsonSerializer(emptySingletonFormat(Cleared))
-    )
+      JsonSerializer(emptySingletonFormat(Cleared)))
   }
 
   sealed trait Evt extends AggregateEvent[Evt] {
@@ -109,8 +109,7 @@ object TestEntity {
     import JsonSerializer.emptySingletonFormat
     import SharedFormats._
     val serializers = Vector(
-      JsonSerializer(Json.format[State])
-    )
+      JsonSerializer(Json.format[State]))
   }
 
   final case class State(mode: Mode, elements: List[String]) {
@@ -156,30 +155,30 @@ class TestEntity(system: ActorSystem)
   private val changeMode: Actions = {
     Actions()
       .onCommand[ChangeMode, Evt] {
-      case (ChangeMode(mode), ctx, state) => {
-        mode match {
-          case mode if state.mode == mode => ctx.done
-          case Mode.Append                => ctx.thenPersist(InAppendMode)(ctx.reply)
-          case Mode.Prepend               => ctx.thenPersist(InPrependMode)(ctx.reply)
+        case (ChangeMode(mode), ctx, state) => {
+          mode match {
+            case mode if state.mode == mode => ctx.done
+            case Mode.Append                => ctx.thenPersist(InAppendMode)(ctx.reply)
+            case Mode.Prepend               => ctx.thenPersist(InPrependMode)(ctx.reply)
+          }
         }
       }
-    }
   }
 
   val baseActions: Actions = {
     Actions()
       .onReadOnlyCommand[Get.type, State] {
-      case (Get, ctx, state) => ctx.reply(state)
-    }
+        case (Get, ctx, state) => ctx.reply(state)
+      }
       .onReadOnlyCommand[GetAddress.type, Address] {
-      case (GetAddress, ctx, state) => ctx.reply(Cluster.get(system).selfAddress)
-    }
+        case (GetAddress, ctx, state) => ctx.reply(Cluster.get(system).selfAddress)
+      }
       .onCommand[Clear.type, State] {
-      case (Clear, ctx, state) => ctx.thenPersist(Cleared)(_ => ctx.reply(state))
-    }
+        case (Clear, ctx, state) => ctx.thenPersist(Cleared)(_ => ctx.reply(state))
+      }
       .onCommand[UnhandledEvtCmd.type, State] {
-      case (_, ctx, state) => ctx.thenPersist(Unhandled)(_ => ctx.reply(state))
-    }
+        case (_, ctx, state) => ctx.thenPersist(Unhandled)(_ => ctx.reply(state))
+      }
       .onEvent {
         case (Cleared, _) => null
       }
@@ -193,20 +192,20 @@ class TestEntity(system: ActorSystem)
         case (InPrependMode, state)  => state.copy(mode = Mode.Prepend)
       }
       .onCommand[Add, Evt] {
-      case (Add(elem, times), ctx, state) =>
-        // note that null should trigger NPE, for testing exception
-        if (elem == null)
-          throw new NullPointerException
-        if (elem.length == 0) {
-          ctx.invalidCommand("element must not be empty");
-          ctx.done
-        }
-        val appended = Appended(elem.toUpperCase)
-        if (times == 1)
-          ctx.thenPersist(appended)(ctx.reply)
-        else
-          ctx.thenPersistAll(List.fill(times)(appended): _*)(() => ctx.reply(appended))
-    }
+        case (Add(elem, times), ctx, state) =>
+          // note that null should trigger NPE, for testing exception
+          if (elem == null)
+            throw new NullPointerException
+          if (elem.length == 0) {
+            ctx.invalidCommand("element must not be empty");
+            ctx.done
+          }
+          val appended = Appended(elem.toUpperCase)
+          if (times == 1)
+            ctx.thenPersist(appended)(ctx.reply)
+          else
+            ctx.thenPersistAll(List.fill(times)(appended): _*)(() => ctx.reply(appended))
+      }
 
   private val prepending: Actions =
     baseActions
@@ -215,17 +214,17 @@ class TestEntity(system: ActorSystem)
         case (InAppendMode, state)    => state.copy(mode = Mode.Append)
       }
       .onCommand[Add, Evt] {
-      case (Add(elem, times), ctx, state) =>
-        if (elem == null || elem.length == 0) {
-          ctx.invalidCommand("element must not be empty");
-          ctx.done
-        }
-        val prepended = Prepended(elem.toLowerCase)
-        if (times == 1)
-          ctx.thenPersist(prepended)(ctx.reply)
-        else
-          ctx.thenPersistAll(List.fill(times)(prepended): _*)(() => ctx.reply(prepended))
-    }
+        case (Add(elem, times), ctx, state) =>
+          if (elem == null || elem.length == 0) {
+            ctx.invalidCommand("element must not be empty");
+            ctx.done
+          }
+          val prepended = Prepended(elem.toLowerCase)
+          if (times == 1)
+            ctx.thenPersist(prepended)(ctx.reply)
+          else
+            ctx.thenPersistAll(List.fill(times)(prepended): _*)(() => ctx.reply(prepended))
+      }
 
   override def recoveryCompleted(state: State): State = {
     probe.foreach(_ ! AfterRecovery(state))

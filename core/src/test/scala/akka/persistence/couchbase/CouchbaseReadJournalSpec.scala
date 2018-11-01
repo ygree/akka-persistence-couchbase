@@ -1,24 +1,27 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.persistence.couchbase
 
 import akka.actor.ActorSystem
 import akka.persistence.query.scaladsl.EventsByTagQuery
-import akka.persistence.query.{EventEnvelope, NoOffset, PersistenceQuery}
+import akka.persistence.query.{ EventEnvelope, NoOffset, PersistenceQuery }
 import akka.stream.ActorMaterializer
 import akka.stream.testkit.TestSubscriber
 import akka.stream.testkit.scaladsl.TestSink
-import akka.testkit.{TestKit, TestProbe}
+import akka.testkit.{ TestKit, TestProbe }
 import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.query.N1qlQuery
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike}
+import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike }
 
 import scala.concurrent.duration._
 
 class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournalSpec"))
   with WordSpecLike with BeforeAndAfterAll with Matchers with BeforeAndAfterEach {
 
-
   override protected def beforeAll(): Unit = {
-     super.beforeAll()
+    super.beforeAll()
     CouchbaseCluster.create()
       .authenticate("admin", "admin1")
       .openBucket("akka")
@@ -29,13 +32,11 @@ class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournal
     shutdown(system)
   }
 
-
   val waitTime = 100.millis
   lazy val queries: CouchbaseReadJournal =
     PersistenceQuery(system).readJournalFor[CouchbaseReadJournal](CouchbaseReadJournal.Identifier)
 
   implicit val mat = ActorMaterializer()
-
 
   "currentPersistenceIds" must {
     "work" in {
@@ -88,7 +89,7 @@ class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournal
       val blackSrc = queries.eventsByTag(tag = "black", offset = NoOffset)
       val probe = blackSrc.runWith(TestSink.probe[Any])
       probe.request(2)
-      probe.expectNextPF { case e@EventEnvelope(_, "b", 1L, "a black car") => e }
+      probe.expectNextPF { case e @ EventEnvelope(_, "b", 1L, "a black car") => e }
       probe.expectNoMessage(waitTime)
 
       d ! "a black dog"
@@ -96,10 +97,10 @@ class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournal
       d ! "a black night"
       senderProbe.expectMsg(s"a black night-done")
 
-      probe.expectNextPF { case e@EventEnvelope(_, "d", 1L, "a black dog") => e }
+      probe.expectNextPF { case e @ EventEnvelope(_, "d", 1L, "a black dog") => e }
       probe.expectNoMessage(waitTime)
       probe.request(10)
-      probe.expectNextPF { case e@EventEnvelope(_, "d", 2L, "a black night") => e }
+      probe.expectNextPF { case e @ EventEnvelope(_, "d", 2L, "a black night") => e }
       probe.cancel()
     }
 
@@ -107,15 +108,15 @@ class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournal
       val greenSrc1 = queries.eventsByTag(tag = "green", offset = NoOffset)
       val probe1 = greenSrc1.runWith(TestSink.probe[Any])
       probe1.request(2)
-      probe1.expectNextPF { case e@EventEnvelope(_, "a", 2L, "a green apple") => e }
-      val offs = probe1.expectNextPF { case e@EventEnvelope(_, "a", 4L, "a green banana") => e }.offset
+      probe1.expectNextPF { case e @ EventEnvelope(_, "a", 2L, "a green apple") => e }
+      val offs = probe1.expectNextPF { case e @ EventEnvelope(_, "a", 4L, "a green banana") => e }.offset
       probe1.cancel()
 
       system.log.info("Starting from offset {}", offs)
       val greenSrc2 = queries.eventsByTag(tag = "green", offs)
       val probe2 = greenSrc2.runWith(TestSink.probe[Any])
       probe2.request(10)
-      probe2.expectNextPF { case e@EventEnvelope(_, "b", 2L, "a green leaf") => e }
+      probe2.expectNextPF { case e @ EventEnvelope(_, "b", 2L, "a green leaf") => e }
       probe2.expectNoMessage(waitTime)
       probe2.cancel()
     }
@@ -132,7 +133,7 @@ class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournal
       probe.request(200)
       for (n <- 1 to 100) {
         val Expected = s"yellow-$n"
-        probe.expectNextPF { case e@EventEnvelope(_, "e", _, Expected) => e }
+        probe.expectNextPF { case e @ EventEnvelope(_, "e", _, Expected) => e }
       }
       probe.expectNoMessage(waitTime)
 
@@ -141,7 +142,7 @@ class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournal
 
       for (n <- 101 to 200) {
         val Expected = s"yellow-$n"
-        probe.expectNextPF { case e@EventEnvelope(_, "e", _, Expected) => e }
+        probe.expectNextPF { case e @ EventEnvelope(_, "e", _, Expected) => e }
       }
       probe.expectNoMessage(waitTime)
 
@@ -170,24 +171,24 @@ class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournal
       val blueSrc = queries.currentEventsByTag(tag = "blue", offset = NoOffset)
       val probe = blueSrc.runWith(TestSink.probe[Any])
       probe.request(2)
-      probe.expectNextPF { case e@EventEnvelope(_, "a1", 2L, "a blue kiwi") => e }
-      probe.expectNextPF { case e@EventEnvelope(_, "a1", 4L, "a blue banana") => e }
+      probe.expectNextPF { case e @ EventEnvelope(_, "a1", 2L, "a blue kiwi") => e }
+      probe.expectNextPF { case e @ EventEnvelope(_, "a1", 4L, "a blue banana") => e }
 
       probe.expectNoMessage(500.millis)
       probe.request(2)
-      probe.expectNextPF { case e@EventEnvelope(_, "b1", 1L, "a blue leaf") => e }
+      probe.expectNextPF { case e @ EventEnvelope(_, "b1", 1L, "a blue leaf") => e }
       probe.expectComplete()
 
       val pinkSrc = queries.currentEventsByTag(tag = "pink", offset = NoOffset)
       val probe2 = pinkSrc.runWith(TestSink.probe[Any])
       probe2.request(5)
-      probe2.expectNextPF { case e@EventEnvelope(_, "a1", 3L, "a pink car") => e }
+      probe2.expectNextPF { case e @ EventEnvelope(_, "a1", 3L, "a pink car") => e }
       probe2.expectComplete()
 
       val appleSrc = queries.currentEventsByTag(tag = "kiwi", offset = NoOffset)
       val probe3 = appleSrc.runWith(TestSink.probe[Any])
       probe3.request(5)
-      probe3.expectNextPF { case e@EventEnvelope(_, "a1", 2L, "a blue kiwi") => e }
+      probe3.expectNextPF { case e @ EventEnvelope(_, "a1", 2L, "a blue kiwi") => e }
       probe3.expectComplete()
     }
   }
