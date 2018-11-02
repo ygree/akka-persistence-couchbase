@@ -4,13 +4,14 @@
 
 package akka.persistence.couchbase
 
-import scala.collection.immutable
 import akka.actor.Props
 import akka.persistence.PersistentActor
 import akka.actor.ActorRef
 import akka.persistence.DeleteMessagesSuccess
 import akka.persistence.couchbase.TestActor.{GetLastRecoveredEvent, SaveSnapshot}
 import akka.persistence.journal.Tagged
+
+import scala.collection.immutable
 
 object TestActor {
   def props(persistenceId: String, journalId: String = "akka.persistence.couchbase.journal"): Props =

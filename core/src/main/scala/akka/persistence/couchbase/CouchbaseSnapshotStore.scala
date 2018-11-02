@@ -29,17 +29,10 @@ import scala.concurrent.{ExecutionContext, Future}
 // Make it an extension to look them up?
 class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
 
-  private val config: CouchbaseSettings = CouchbaseSettings(cfg)
+  private val settings: CouchbaseSnapshotSettings = CouchbaseSnapshotSettings(cfg)
   private implicit val ec: ExecutionContext = context.dispatcher
 
-  private val cluster: Cluster = {
-    val c = CouchbaseCluster.create()
-    log.info("Auth {} {}", config.username, config.password)
-    c.authenticate(config.username, config.password)
-    c
-  }
-
-  val couchbase = CouchbaseSession(cluster.openBucket(config.bucket))
+  val couchbase = CouchbaseSession(settings.sessionSettings, settings.bucket)
   val serialization = SerializationExtension(context.system)
 
   /**

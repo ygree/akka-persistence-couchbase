@@ -44,16 +44,12 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     with PersistenceIdsQuery {
 
   private val serialization: Serialization = SerializationExtension(as)
-  // TODO config
-  private val settings = CouchbaseSettings(config)
-  // FIXME, hosts from config
-  private val cluster = CouchbaseCluster.create().authenticate(settings.username, settings.password)
-  private val bucket = cluster.openBucket(settings.bucket)
-  private val asyncBucket = bucket.async()
-  private val session = CouchbaseSession(bucket)
+
+  private val settings = CouchbaseReadJournalSettings(config.getConfig(configPath))
+  private val session = CouchbaseSession(settings.sessionSettings, settings.bucket)
 
   as.registerOnTermination {
-    cluster.disconnect()
+    session.close()
   }
 
   val pageSize: Int = 100 // FIXME from config
@@ -109,7 +105,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
           pageSize,
           N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
           params,
-          asyncBucket,
+          session.underlying,
           EventsByPersistenceIdState(fromSequenceNr, 0),
           state => {
             if (state.to >= toSequenceNr)
@@ -160,7 +156,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
             pageSize,
             N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, initialOrdering), queryParams),
             params,
-            asyncBucket,
+            session.underlying,
             initialOrdering,
             ordering =>
               Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),

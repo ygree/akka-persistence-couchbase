@@ -9,9 +9,13 @@
         </layout>
     </appender>
 
-    <logger name="akka" level="DEBUG" />
+    <!--
+    <logger name="akka" level="INFO" />
+    <logger name="com.couchbase.client.core.node.Node" level="WARN"/>
+    <logger name="com.couchbase.client.core.env.CoreEnvironment" level="WARN"/>
+    -->
 
-    <root level="INFO">
+    <root level="WARN">
         <appender-ref ref="STDOUT"/>
     </root>
 

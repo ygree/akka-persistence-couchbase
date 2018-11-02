@@ -8,22 +8,26 @@ import java.util.concurrent.TimeUnit
 
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.{Cluster, CouchbaseCluster}
-import com.couchbase.client.java.query.N1qlQuery
+import com.couchbase.client.java.bucket.BucketType
+import com.couchbase.client.java.cluster.DefaultBucketSettings
+import com.couchbase.client.java.query.{Index, N1qlQuery}
+import com.couchbase.client.java.query.dsl.clause._
+import com.couchbase.client.java.query.dsl.Expression._
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
 import scala.util.Try
 
 trait CouchbaseBucketSetup extends BeforeAndAfterAll { self: Suite =>
 
+  private var cluster: Cluster = _
   var session: CouchbaseSession = _
-  var cluster: Cluster = _
 
   override protected def beforeAll(): Unit = {
 
     val bucketName = "akka"
-    cluster = CouchbaseCluster
-      .create()
-      .authenticate("admin", "admin1") // needs to be admin
+    cluster = CouchbaseCluster.create()
+    cluster.authenticate("admin", "admin1") // needs to be admin
+    val manager = cluster.clusterManager()
 
     val bucket = cluster.openBucket(bucketName)
 

@@ -9,8 +9,8 @@ import akka.dispatch.ExecutionContexts
 import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
-import akka.{Done, NotUsed}
-import com.couchbase.client.java.Bucket
+import akka.{ Done, NotUsed }
+import com.couchbase.client.java.{ AsyncBucket, Bucket, Cluster }
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
@@ -19,15 +19,19 @@ import rx.RxReactiveStreams
 import scala.concurrent.Future
 
 /**
+ *
+ * @param cluster if provided, it will be shut down when `close()` is called
+ *
  * InternalAPI
  */
 @InternalApi
-final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket) extends CouchbaseSession {
-
+final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Option[Cluster]) extends CouchbaseSession {
   private val asyncBucket = bucket.async()
   import RxUtilities._
 
-  def insert(document: JsonDocument): Future[JsonDocument] =
+  override def underlying: AsyncBucket = asyncBucket
+
+  def insert(document: JsonDocument): Future[JsonDocument] = {
     singleObservableToFuture(asyncBucket.insert(document), document)
 
   def insert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument] =
@@ -95,6 +99,13 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket) extends Couc
   def close(): Future[Done] =
     if (!asyncBucket.isClosed) {
       singleObservableToFuture(asyncBucket.close(), "close")
+        .map { _ =>
+          // FIXME blocking on global ec right now
+          cluster match {
+            case Some(cluster) => cluster.disconnect()
+            case None          =>
+          }
+        }(ExecutionContexts.global())
         .map(_ => Done)(ExecutionContexts.sameThreadExecutionContext)
     } else {
       Future.successful(Done)

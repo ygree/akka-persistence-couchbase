@@ -7,6 +7,7 @@ package akka.stream.alpakka.couchbase
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit
 import com.couchbase.client.java.bucket.BucketType
 import com.couchbase.client.java.cluster.DefaultBucketSettings
@@ -18,6 +19,7 @@ import com.couchbase.client.java.{Cluster, CouchbaseCluster}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpec}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with BeforeAndAfterAll with Eventually {
@@ -29,6 +31,7 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
 
   private implicit val system = ActorSystem("CouchbaseSessionSpec")
   private implicit val materializer = ActorMaterializer()
+  import system.dispatcher
 
   private val bucketName = "couchbaseSessionTest"
   private val cluster: Cluster = {
@@ -94,6 +97,26 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
 
     }
 
+    "stream query results" in {
+
+      bucket.bucketManager().createN1qlIndex("q", true, false, "daField")
+
+      Future.traverse(1 to 1000) { (n) =>
+        val obj = JsonObject.create()
+        obj.put("daField", n: Long)
+        session.insert(JsonDocument.create(s"q-$n", obj))
+      }.futureValue
+
+      val query = select("*")
+        .from(bucketName)
+        .where(x("daField").isValued)
+
+      // FIXME verify backpressure somehow
+      val queryResult = session.streamedQuery(query).runWith(Sink.seq).futureValue
+
+      queryResult should have size 1000
+    }
+
     "upsert a missing document" in {
       val upsertObject = JsonObject.create()
       upsertObject.put("intVal", 5)
@@ -114,8 +137,8 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
   }
 
   override protected def afterAll(): Unit = {
-    cluster.clusterManager().removeBucket(bucketName)
     session.close().futureValue
+    cluster.clusterManager().removeBucket(bucketName)
     cluster.disconnect()
     TestKit.shutdownActorSystem(system)
   }

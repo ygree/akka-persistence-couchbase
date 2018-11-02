@@ -7,9 +7,8 @@ package com.lightbend.lagom.javadsl.persistence.couchbase
 import java.net.URI
 
 import akka.actor.ActorSystem
-import akka.persistence.couchbase.CouchbaseSettings
+import akka.persistence.couchbase.CouchbaseJournalSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
-import com.couchbase.client.java._
 import com.google.inject.Provider
 import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{
   CouchbasePersistentEntityRegistry,
@@ -48,17 +47,11 @@ class CouchbasePersistenceModule extends Module {
 }
 
 private[lagom] class CouchbaseSessionProvider @Inject()(cfg: Config) extends Provider[CouchbaseSession] {
-  private val config: CouchbaseSettings = CouchbaseSettings(cfg)
+
+  private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(cfg)
   //  private implicit val ec: ExecutionContext = context.dispatcher
 
-  private val cluster: Cluster = {
-    val c = CouchbaseCluster.create()
-    //    log.info("Auth {} {}", config.username, config.password)
-    c.authenticate(config.username, config.password)
-    c
-  }
-
-  val session = CouchbaseSession(cluster.openBucket(config.bucket))
+  val session = CouchbaseSession(settings.sessionSettings, settings.bucket)
 
   override def get(): CouchbaseSession =
     //TODO:
