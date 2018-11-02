@@ -7,21 +7,20 @@ package akka.persistence.couchbase
 import akka.NotUsed
 import akka.actor.ExtendedActorSystem
 import akka.persistence.couchbase.CouchbaseJournal.{ Fields, TaggedPersistentRepr, deserialize, extractTaggedEvent }
-import akka.persistence.query.scaladsl._
 import akka.persistence.query._
+import akka.persistence.query.scaladsl._
 import akka.serialization.{ Serialization, SerializationExtension }
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.CouchbaseCluster
-import com.couchbase.client.java.document.json.{ JsonArray, JsonObject }
+import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
 import com.typesafe.config.Config
-import rx.{ Observable, RxReactiveStreams }
 
-import scala.collection.JavaConverters._
 import scala.collection.immutable
 
 object CouchbaseReadJournal {
@@ -48,7 +47,9 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
   private val settings = CouchbaseSettings(config)
   // FIXME, hosts from config
   private val cluster = CouchbaseCluster.create().authenticate(settings.username, settings.password)
-  private val bucket = cluster.openBucket(settings.bucket).async()
+  private val bucket = cluster.openBucket(settings.bucket)
+  private val asyncBucket = bucket.async()
+  private val session = CouchbaseSession(bucket)
 
   as.registerOnTermination {
     cluster.disconnect()
@@ -99,7 +100,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
       pageSize,
       N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
       params,
-      bucket,
+      asyncBucket,
       EventsByPersistenceIdState(fromSequenceNr, 0),
       state => {
         if (state.to >= toSequenceNr)
@@ -144,7 +145,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
       live,
       pageSize,
       N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, initialOrdering), queryParams),
-      params, bucket, initialOrdering,
+      params, asyncBucket, initialOrdering,
       ordering => Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),
       (_, row) => row.value().getObject("akka").getLong(Fields.Ordering) + 1)).mapMaterializedValue(_ => NotUsed), tag)
   }
@@ -182,18 +183,8 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     // this type works on the current queries we'd need to create a stage
     // to do the live queries
     // this can fail as it relies on async updates to the index.
-    val query = select(distinct(Fields.PersistenceId)).from("akka").where(x(Fields.PersistenceId).isNotNull)
-    n1qlQuery(query).map(row => row.value().getString(Fields.PersistenceId))
-  }
-
-  private def n1qlQuery(query: N1qlQuery): Source[AsyncN1qlQueryRow, NotUsed] = {
-    Source.fromPublisher(RxReactiveStreams.toPublisher({
-      bucket.query(query).flatMap(toFunc1(results => results.rows()))
-    }))
-  }
-  private def n1qlQuery(query: Statement): Source[AsyncN1qlQueryRow, NotUsed] = {
-    Source.fromPublisher(RxReactiveStreams.toPublisher(
-      bucket.query(query).flatMap(toFunc1(results => results.rows()))))
+    val query = select(distinct(Fields.PersistenceId)).from(settings.bucket).where(x(Fields.PersistenceId).isNotNull)
+    session.streamedQuery(query).map(_.getString(Fields.PersistenceId))
   }
 
   /*

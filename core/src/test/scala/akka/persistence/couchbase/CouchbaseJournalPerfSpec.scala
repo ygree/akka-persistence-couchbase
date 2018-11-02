@@ -11,14 +11,7 @@ import com.couchbase.client.java.query.N1qlQuery
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
 
-class CouchbaseJournalPerfSpec extends JournalPerfSpec(ConfigFactory.load()) {
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    CouchbaseCluster.create()
-      .authenticate("admin", "admin1")
-      .openBucket("akka")
-      .query(N1qlQuery.simple("delete from akka"))
-  }
+class CouchbaseJournalPerfSpec extends JournalPerfSpec(ConfigFactory.load()) with CouchbaseBucketSetup {
 
   override def awaitDurationMillis: Long = 40.seconds.toMillis
 

@@ -3,7 +3,7 @@ import sbt.Keys.{name, publishArtifact}
 
 crossScalaVersions := Seq("2.12.6", "2.11.12")
 
-def common: Seq[Setting[_]] = scalariformSettings(true) ++ Seq(
+def common: Seq[Setting[_]] = Seq(
   organization := "com.lightbend.akka",
   organizationName := "Lightbend Inc.",
   startYear := Some(2018),
@@ -39,6 +39,7 @@ def common: Seq[Setting[_]] = scalariformSettings(true) ++ Seq(
   // disable parallel tests
   parallelExecution in Test := false,
 
+  ScalariformKeys.autoformat := true,
   ScalariformKeys.preferences in Compile  := formattingPreferences,
   ScalariformKeys.preferences in Test     := formattingPreferences
 )
@@ -51,7 +52,16 @@ lazy val root = (project in file("."))
     publishTo := Some(Resolver.file("Unused transient repository", file("target/unusedrepo"))),
     publish := {}
   )
-  .aggregate((lagomModules ++ Seq(core)).map(Project.projectToRef): _*)
+  .aggregate((Seq(couchbaseClient, core) ++ lagomModules).map(Project.projectToRef): _*)
+
+
+// TODO this should eventually be an alpakka module
+lazy val couchbaseClient = (project in file("couchbase-client"))
+  .settings(common)
+  .settings(
+    name := "akka-persistence-couchbase-client",
+    libraryDependencies := Dependencies.couchbaseClient
+  )
 
 lazy val core = (project in file("core"))
   .enablePlugins(AutomateHeaderPlugin)
@@ -59,7 +69,7 @@ lazy val core = (project in file("core"))
   .settings(
     name := "akka-persistence-couchbase",
     libraryDependencies := Dependencies.core
-  )
+  ).dependsOn(couchbaseClient)
 
 lazy val lagomModules = Seq[Project](
   `lagom-persistence-couchbase-core`,

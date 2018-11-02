@@ -15,6 +15,9 @@ object Dependencies {
 
     // used to easily convert rxjava into reactive streams and then into akka streams
     val rxJavaReactiveStreams = "io.reactivex"          % "rxjava-reactive-streams" % "1.2.1" // Apache V2
+
+    val akkaActor =             "com.typesafe.akka"    %% "akka-actor"              % AkkaVersion
+    val akkaStream =            "com.typesafe.akka"    %% "akka-stream"             % AkkaVersion
     val akkaPersistence =       "com.typesafe.akka"    %% "akka-persistence"        % AkkaVersion
     val akkaPersistenceQuery =  "com.typesafe.akka"    %% "akka-persistence-query"  % AkkaVersion
 
@@ -27,6 +30,7 @@ object Dependencies {
   object Test {
     val akkaPersistenceTck =    "com.typesafe.akka"       %% "akka-persistence-tck"    % AkkaVersion  % "test"
     val akkaStreamTestkit =     "com.typesafe.akka"       %% "akka-stream-testkit"     % AkkaVersion  % "test"
+    
     val logback =               "ch.qos.logback"           % "logback-classic"         % "1.2.3"      % "test" // EPL 1.0 / LGPL 2.1
     val scalaTest =             "org.scalatest"           %% "scalatest"               % "3.0.4"      % "test" // ApacheV2
     val lagomTestKitScalaDsl =  "com.lightbend.lagom"     %% "lagom-scaladsl-testkit"  % LagomVersion % "test"
@@ -37,8 +41,13 @@ object Dependencies {
   import Test._
 
   val core = Seq(
-    couchbaseClient, couchbaseDcpClient, rxJavaReactiveStreams, akkaPersistence, akkaPersistenceQuery,
+    akkaActor, akkaPersistence, akkaPersistenceQuery,
     akkaPersistenceTck, akkaStreamTestkit, logback, scalaTest
+  )
+
+  val couchbaseClient = Seq(
+    akkaActor, akkaStream, akkaStreamTestkit, Compile.couchbaseClient, couchbaseDcpClient, rxJavaReactiveStreams,
+    scalaTest, logback
   )
 
   val `lagom-persistence-couchbase-core` = Seq(

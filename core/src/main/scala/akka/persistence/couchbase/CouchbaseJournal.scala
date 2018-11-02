@@ -4,28 +4,30 @@
 
 package akka.persistence.couchbase
 
+import java.util.Base64
+
+import akka.dispatch.ExecutionContexts
 import akka.event.Logging
+import akka.persistence.couchbase.CouchbaseJournal.Fields
 import akka.persistence.journal.{ AsyncWriteJournal, Tagged }
 import akka.persistence.{ AtomicWrite, PersistentRepr }
-import akka.serialization.{ Serialization, SerializationExtension, Serializers }
-import com.couchbase.client.java.document.{ JsonDocument, JsonLongDocument }
+import akka.serialization.{ Serialization, SerializationExtension }
+import akka.stream.ActorMaterializer
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{ JsonArray, JsonObject }
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.Sort._
-import com.couchbase.client.java.{ AsyncBucket, Bucket, Cluster, CouchbaseCluster }
+import com.couchbase.client.java.{ Cluster, CouchbaseCluster }
 import com.typesafe.config.Config
-import rx.{ Observable, Subscriber }
 
 import scala.collection.JavaConverters._
 import scala.collection.{ immutable => im }
 import scala.concurrent.{ ExecutionContext, Future, Promise }
-import scala.util.Try
-import java.util.Base64
-
-import akka.persistence.couchbase.CouchbaseJournal.Fields
+import scala.util.{ Failure, Success, Try }
 
 object CouchbaseJournal {
 
@@ -100,8 +102,10 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
   private val log = Logging(this)
   private val serialization: Serialization = SerializationExtension(context.system)
 
-  private val config: CouchbaseSettings = CouchbaseSettings(c)
+  private implicit val materializer = ActorMaterializer() // FIXME keeping our own rather than reusing another one?
 
+  // FIXME move connect logic to connector/client?
+  private val config: CouchbaseSettings = CouchbaseSettings(c)
   private val cluster: Cluster = {
     val c = CouchbaseCluster.create()
     log.info("Auth {} {}", config.username, config.password)
@@ -109,11 +113,10 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     c
   }
 
-  val bucket: Bucket = cluster.openBucket(config.bucket)
-  val asyncBucket: AsyncBucket = cluster.openBucket(config.bucket).async()
+  val couchbase = CouchbaseSession(cluster.openBucket(config.bucket))
 
   override def postStop(): Unit = {
-    cluster.disconnect()
+    couchbase.close()
   }
 
   override def asyncWriteMessages(messages: im.Seq[AtomicWrite]): Future[im.Seq[Try[Unit]]] = {
@@ -146,52 +149,44 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
       (s"$pid-${aw.lowestSequenceNr}", insert)
     })
 
-    val result = Future.sequence(inserts.map((jo: (String, JsonObject)) => {
-      val p = Promise[Try[Unit]]()
-      // TODO make persistTo configurable
-      val something: Observable[JsonLongDocument] = asyncBucket.counter("akka", 1, 0)
-
-      val write = something.flatMap(toFunc1(id => {
-        val withId = jo._2.put(Fields.Ordering, id.content())
-        asyncBucket.insert(JsonDocument.create(jo._1, withId))
-      }))
-
-      write.single().subscribe(new Subscriber[JsonDocument]() {
-        override def onCompleted(): Unit = p.tryComplete(Try(Try(())))
-        override def onError(e: Throwable): Unit = p.tryFailure(e)
-        override def onNext(t: JsonDocument): Unit = ()
-      })
-      p.future
-    }))
-    result
+    // FIXME sequence will fail entire future rather than individual write
+    Future.sequence(inserts.map {
+      case (persistenceId, json) =>
+        val p = Promise[Try[Unit]]()
+        // TODO make persistTo configurable
+        couchbase.counter(config.bucket, 1, 0).flatMap { id =>
+          val withId = json.put(Fields.Ordering, id)
+          couchbase.insert(JsonDocument.create(persistenceId, withId))
+        }
+    }).map(writes => writes.map(_ => Success(())))
   }
 
   override def asyncDeleteMessagesTo(persistenceId: String, toSequenceNr: Long): Future[Unit] = {
     log.info("asyncDeleteMessagesTo {} {}", persistenceId, toSequenceNr)
     val docId = s"$persistenceId-meta"
-    if (toSequenceNr == Long.MaxValue) {
+    (if (toSequenceNr == Long.MaxValue) {
       log.info("Journal cleanup (Long.MaxValue)")
       asyncReadHighestSequenceNr(persistenceId, 0).flatMap { highestSeqNr =>
-        singleObservableToFuture(asyncBucket.upsert(JsonDocument.create(docId, JsonObject.create().put("deleted_to", highestSeqNr))))
-          .map(_ => ())
+        couchbase.upsert(JsonDocument.create(docId, JsonObject.create().put("deleted_to", highestSeqNr)))
       }
     } else {
-      singleObservableToFuture(asyncBucket.upsert(JsonDocument.create(docId, JsonObject.create().put("deleted_to", toSequenceNr))))
-        .map(_ => ())
-    }
+      couchbase.upsert(JsonDocument.create(docId, JsonObject.create().put("deleted_to", toSequenceNr)))
+    }).map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
   // TODO use eventsByPersistenceId
   override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(recoveryCallback: PersistentRepr => Unit): Future[Unit] = {
     log.info("asyncReplayMessages {} {} {} {}", persistenceId, fromSequenceNr, toSequenceNr, max)
-    val deletedTo: Future[Long] = zeroOrOneObservableToFuture(asyncBucket.get(s"$persistenceId-meta"))
-      .map {
-        case Some(jo: JsonDocument) =>
-          val dt = jo.content().getLong("deleted_to").toLong
-          log.info("Previously deleted to: {}", dt)
-          dt + 1 // start at the next sequence nr
-        case None => fromSequenceNr
-      }
+
+    val deletedTo: Future[Long] =
+      couchbase.get(s"$persistenceId-meta")
+        .map {
+          case Some(jsonDoc) =>
+            val dt = jsonDoc.content().getLong("deleted_to").toLong
+            log.info("Previously deleted to: {}", dt)
+            dt + 1 // start at the next sequence nr
+          case None => fromSequenceNr
+        }
 
     val replayFinished: Future[Unit] = deletedTo.flatMap { starting =>
 
@@ -199,43 +194,31 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
 
       // FIXME, needs an orderby make sure index works with it
       val replayQuery = select("*")
-        .from("akka")
+        .from(config.bucket)
         .where(x(Fields.PersistenceId).eq(x("$1"))
           .and(x(Fields.SequenceFrom).gte(starting)
             .and(Fields.SequenceFrom).lte(toSequenceNr)))
 
       log.info("Query: " + replayQuery)
-
-      // FIXME use currentEventsByPersistenceId query (benefit from paging)
-
-      def limit[T](in: Observable[T]): Observable[T] = {
-        if (max >= 0 && max != Long.MaxValue)
-          in.limit(max.asInstanceOf[Int]) // TODO: Does this cancel the query? // FIXME why is this a bloody int? create a subscriber to do this
-        else
-          in
-      }
-
       val query = N1qlQuery.parameterized(replayQuery, JsonArray.from(persistenceId))
-      val done = Promise[Unit]
 
-      limit(asyncBucket.query(query)
-        .flatMap(toFunc1(result => result.rows())))
-        .subscribe(
-          new Subscriber[AsyncN1qlQueryRow]() {
-            override def onCompleted(): Unit = {
-              done.tryComplete(Try(()))
-            }
-            override def onError(e: Throwable): Unit = {
-              e.printStackTrace(System.out)
-              done.tryFailure(e)
-            }
-            override def onNext(row: AsyncN1qlQueryRow): Unit = {
-              CouchbaseJournal.deserialize(row.value().getObject("akka"), toSequenceNr, serialization, CouchbaseJournal.extractEvent).foreach { pr =>
-                recoveryCallback(pr)
-              }
-            }
+      val source =
+        if (max >= 0 && max != Long.MaxValue) couchbase.streamedQuery(query).take(max) // FIXME make sure this cancels the query
+        else couchbase.streamedQuery(query)
+
+      val done = source
+        .runForeach(json =>
+          CouchbaseJournal.deserialize(json.getObject(config.bucket), toSequenceNr, serialization, CouchbaseJournal.extractEvent).foreach { pr =>
+            recoveryCallback(pr)
           })
-      done.future
+
+      done.onComplete {
+        case Failure(ex) =>
+          // FIXME this is just to see errors in development?
+          ex.printStackTrace(System.out)
+        case _ =>
+      }
+      done.map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
     }
 
     replayFinished
@@ -246,10 +229,8 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
   override def asyncReadHighestSequenceNr(persistenceId: String, fromSequenceNr: Long): Future[Long] = {
     log.info("asyncReadHighestSequenceNr {} {}", persistenceId, fromSequenceNr)
 
-    val result = Promise[Long]
-
     val highestSequenceNrStatement = select(Fields.SequenceTo)
-      .from("akka")
+      .from(config.bucket)
       .where(x(Fields.PersistenceId).eq(x("$1"))
         .and(x(Fields.SequenceFrom).gte(fromSequenceNr)))
       .orderBy(desc(Fields.SequenceFrom))
@@ -264,27 +245,13 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
 
     log.info("Executing: {}", highestSequenceNrQuery)
 
-    asyncBucket.query(highestSequenceNrQuery)
-      .flatMap(toFunc1(result => result.rows()))
-      .subscribe(new Subscriber[AsyncN1qlQueryRow]() {
-        override def onCompleted(): Unit = {
-          if (!result.isCompleted)
-            result.tryComplete(Try(fromSequenceNr))
-
-          log.info("Highest sequence nr query complete. {}", result.future.value)
-          ()
-        }
-
-        override def onError(e: Throwable): Unit = result.tryFailure(e)
-
-        override def onNext(t: AsyncN1qlQueryRow): Unit = {
-          log.info("sequence nr: {}", t)
-          val to = t.value().getLong("sequence_to")
-          result.tryComplete(Try(to))
-        }
-
-      })
-
-    result.future
+    couchbase.singleResponseQuery(highestSequenceNrQuery)
+      .map {
+        case Some(jsonObj) =>
+          log.info("sequence nr: {}", jsonObj)
+          jsonObj.getLong("sequence_to")
+        case None =>
+          0L
+      }
   }
 }

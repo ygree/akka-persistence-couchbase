@@ -7,12 +7,11 @@ package com.lightbend.lagom.internal.persistence.couchbase
 import akka.Done
 import akka.actor.ActorSystem
 import akka.persistence.query.{ NoOffset, Offset, Sequence, TimeBasedUUID }
-import com.couchbase.client.java.{ AsyncBucket, CouchbaseCluster }
-import com.lightbend.lagom.internal.persistence.ReadSideConfig
-import com.lightbend.lagom.spi.persistence.{ OffsetDao, OffsetStore }
-import akka.persistence.couchbase._
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
+import com.lightbend.lagom.internal.persistence.ReadSideConfig
+import com.lightbend.lagom.spi.persistence.{ OffsetDao, OffsetStore }
 
 import scala.concurrent.{ ExecutionContext, Future }
 
@@ -29,13 +28,13 @@ private[lagom] object CouchbaseOffset {
 private[lagom] abstract class CouchbaseOffsetStore(
   system:  ActorSystem,
   config:  ReadSideConfig,
-  session: AsyncBucket) extends OffsetStore {
+  session: CouchbaseSession) extends OffsetStore {
 
   import system.dispatcher
 
   def prepare(eventProcessorId: String, tag: String): Future[CouchbaseOffsetDao] = {
     // FIXME use the right dispatcher
-    val offset: Future[Option[JsonDocument]] = zeroOrOneObservableToFuture(session.get(CouchbaseOffset.offsetKey(eventProcessorId, tag)))
+    val offset: Future[Option[JsonDocument]] = session.get(CouchbaseOffset.offsetKey(eventProcessorId, tag))
     offset.map {
       case None => new CouchbaseOffsetDao(session, eventProcessorId, tag, NoOffset, system.dispatcher)
       case Some(a: JsonDocument) =>
@@ -49,7 +48,7 @@ private[lagom] abstract class CouchbaseOffsetStore(
 /**
  * Internal API
  */
-private[lagom] final class CouchbaseOffsetDao(session: AsyncBucket, eventProcessorId: String, tag: String, override val loadedOffset: Offset, ec: ExecutionContext) extends OffsetDao {
+private[lagom] final class CouchbaseOffsetDao(session: CouchbaseSession, eventProcessorId: String, tag: String, override val loadedOffset: Offset, ec: ExecutionContext) extends OffsetDao {
 
   override def saveOffset(offset: Offset): Future[Done] = {
     bindSaveOffset(offset).execute(session, ec)
@@ -57,10 +56,10 @@ private[lagom] final class CouchbaseOffsetDao(session: AsyncBucket, eventProcess
 
   def bindSaveOffset(offset: Offset): CouchbaseAction = {
     offset match {
-      case NoOffset => (ab: AsyncBucket, ec: ExecutionContext) => Future.successful(Done)
-      case seq: Sequence => (ab: AsyncBucket, ec: ExecutionContext) => {
+      case NoOffset => (ab: CouchbaseSession, ec: ExecutionContext) => Future.successful(Done)
+      case seq: Sequence => (ab: CouchbaseSession, ec: ExecutionContext) => {
         val id = CouchbaseOffset.offsetKey(eventProcessorId, tag)
-        singleObservableToFuture(ab.upsert(JsonDocument.create(id, JsonObject.create().put("sequenceOffset", seq.value))))
+        ab.upsert(JsonDocument.create(id, JsonObject.create().put("sequenceOffset", seq.value)))
           .map(_ => Done)(ec)
       }
       case uuid: TimeBasedUUID => ??? // not allowed for couchbase or is it?

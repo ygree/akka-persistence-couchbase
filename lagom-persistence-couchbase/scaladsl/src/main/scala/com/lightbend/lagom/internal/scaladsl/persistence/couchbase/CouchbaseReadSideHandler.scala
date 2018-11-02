@@ -6,9 +6,9 @@ package com.lightbend.lagom.internal.scaladsl.persistence.couchbase
 
 import akka.persistence.query.Offset
 import akka.stream.ActorAttributes
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Flow
 import akka.{ Done, NotUsed }
-import com.couchbase.client.java.AsyncBucket
 import com.lightbend.lagom.internal.persistence.couchbase.{ CouchbaseAction, CouchbaseOffsetDao, CouchbaseOffsetStore }
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
 import com.lightbend.lagom.scaladsl.persistence._
@@ -21,7 +21,7 @@ import scala.concurrent.{ ExecutionContext, Future }
  * Internal API
  */
 private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEvent[Event], Handler](
-  session:    AsyncBucket,
+  session:    CouchbaseSession,
   handlers:   Map[Class[_ <: Event], Handler],
   dispatcher: String)(implicit ec: ExecutionContext) extends ReadSideHandler[Event] {
 
@@ -71,7 +71,7 @@ private[couchbase] object CouchbaseAutoReadSideHandler {
  * Internal API
  */
 private[couchbase] final class CouchbaseAutoReadSideHandler[Event <: AggregateEvent[Event]](
-  session:         AsyncBucket,
+  session:         CouchbaseSession,
   offsetStore:     CouchbaseOffsetStore,
   handlers:        Map[Class[_ <: Event], CouchbaseAutoReadSideHandler.Handler[Event]],
   readProcessorId: String,

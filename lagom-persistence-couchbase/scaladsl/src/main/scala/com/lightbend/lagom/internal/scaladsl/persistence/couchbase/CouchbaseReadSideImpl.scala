@@ -4,15 +4,14 @@
 
 package com.lightbend.lagom.internal.scaladsl.persistence.couchbase
 
-import akka.Done
 import akka.actor.ActorSystem
 import akka.dispatch.MessageDispatcher
-import com.couchbase.client.java.AsyncBucket
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.lightbend.lagom.internal.persistence.couchbase.{ CouchbaseAction, CouchbaseOffsetStore }
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
 import com.lightbend.lagom.scaladsl.persistence.couchbase.CouchbaseReadSide
 import com.lightbend.lagom.scaladsl.persistence.couchbase.CouchbaseReadSide.ReadSideHandlerBuilder
-import com.lightbend.lagom.scaladsl.persistence.{ AggregateEvent, AggregateEventTag, EventStreamElement }
+import com.lightbend.lagom.scaladsl.persistence.{ AggregateEvent, EventStreamElement }
 
 import scala.collection.immutable
 import scala.concurrent.Future
@@ -22,7 +21,7 @@ import scala.reflect.ClassTag
  * Internal API
  */
 private[lagom] final class CouchbaseReadSideImpl(
-  system: ActorSystem, session: AsyncBucket, offsetStore: CouchbaseOffsetStore) extends CouchbaseReadSide {
+  system: ActorSystem, session: CouchbaseSession, offsetStore: CouchbaseOffsetStore) extends CouchbaseReadSide {
 
   private val dispatcher = system.settings.config.getString("lagom.persistence.read-side.use-dispatcher")
   implicit val ec: MessageDispatcher = system.dispatchers.lookup(dispatcher)

@@ -4,23 +4,24 @@
 
 package akka.persistence.couchbase
 
+import akka.dispatch.ExecutionContexts
 import akka.persistence.couchbase.CouchbaseJournal.Fields
 import akka.persistence.snapshot.SnapshotStore
 import akka.persistence.{ SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria }
 import akka.serialization.SerializationExtension
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{ JsonArray, JsonObject }
 import com.couchbase.client.java.error.DocumentDoesNotExistException
 import com.couchbase.client.java.query.Delete._
 import com.couchbase.client.java.query.Select.select
-import com.couchbase.client.java.query.{ N1qlQuery, _ }
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.Sort._
-import com.couchbase.client.java.{ AsyncBucket, Bucket, Cluster, CouchbaseCluster }
+import com.couchbase.client.java.query.{ N1qlQuery, _ }
+import com.couchbase.client.java.{ Cluster, CouchbaseCluster }
 import com.typesafe.config.Config
-import rx.{ Observable, Subscriber }
 
 import scala.concurrent.{ ExecutionContext, Future }
 
@@ -38,8 +39,7 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
     c
   }
 
-  val bucket: Bucket = cluster.openBucket(config.bucket)
-  val asyncBucket: AsyncBucket = cluster.openBucket(config.bucket).async()
+  val couchbase = CouchbaseSession(cluster.openBucket(config.bucket))
   val serialization = SerializationExtension(context.system)
 
   /**
@@ -63,21 +63,19 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
       .limit(1)
 
     // FIXME, deal with errors
-    val result: Observable[AsyncN1qlQueryRow] = asyncBucket.query(N1qlQuery.parameterized(
+    val result: Future[Option[JsonObject]] = couchbase.singleResponseQuery(N1qlQuery.parameterized(
       query,
       JsonArray.from("snapshot", persistenceId), N1qlParams.build().consistency(ScanConsistency.STATEMENT_PLUS)))
-      .flatMap(toFunc1(_.rows()))
 
-    zeroOrOneObservableToFuture(result).map { row =>
-      row.map { snapshot =>
-        val value = snapshot.value().getObject("akka")
-        SelectedSnapshot(
+    result.map {
+      case Some(value) =>
+        Some(SelectedSnapshot(
           SnapshotMetadata(
             persistenceId,
             value.getLong(Fields.SequenceNr),
             value.getLong(Fields.Timestamp)),
-          Serialized.fromJsonObject(serialization, value))
-      }
+          Serialized.fromJsonObject(serialization, value)))
+      case None => None
     }
   }
 
@@ -92,14 +90,13 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
 
     val key = snapshotKey(metadata)
 
-    val insert: Observable[JsonDocument] = asyncBucket.upsert(JsonDocument.create(snapshotKey(metadata), toStore))
-
-    singleObservableToFuture(insert).map(_ => ())
+    couchbase.upsert(JsonDocument.create(snapshotKey(metadata), toStore))
+      .map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
   def deleteAsync(metadata: SnapshotMetadata): Future[Unit] = {
     val key = snapshotKey(metadata)
-    zeroOrOneObservableToFuture(asyncBucket.remove(key))
+    couchbase.remove(key)
       .recover {
         case _: DocumentDoesNotExistException => ()
       }
@@ -111,8 +108,7 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
     val query = N1qlQuery.parameterized(deleteFrom("akka")
       .where(filter), JsonArray.from("snapshot", persistenceId))
 
-    zeroOrOneObservableToFuture(asyncBucket.query(query))
-      .map(_ => ())
+    couchbase.singleResponseQuery(query).map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
   private def snapshotFilter(criteria: SnapshotSelectionCriteria): Expression = {
