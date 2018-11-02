@@ -1,5 +1,5 @@
 addSbtPlugin("de.heikoseeberger" % "sbt-header" % "5.0.0") // for maintenance of copyright file header
-addSbtPlugin("org.scalariform" % "sbt-scalariform" % "1.8.2") // sources autoformat
+addSbtPlugin("com.geirsson" % "sbt-scalafmt" % "1.4.0") // sources autoformat
 
 // whitesource for tracking licenses and vulnerabilities in dependencies
 addSbtPlugin("com.lightbend" % "sbt-whitesource" % "0.1.13")
