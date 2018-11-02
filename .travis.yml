@@ -20,6 +20,8 @@ jobs:
       env: SCALAFMT_CHECK
     - script: sbt scalafmtSbtCheck || { echo "[error] Unformatted sbt code found. Please run 'scalafmtSbt' and commit the reformatted code."; false; }
       env: SCALAFMT_SBT_CHECK
+    - script: sbt headerCheck || { echo "[error] Missing license headers found. Please run 'headerCreate' and commit the updated code."; false; }
+      env: HEADER_SBT_CHECK
     - env: CMD="Test/compile"
 
     - stage: whitesource
