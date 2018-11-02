@@ -150,14 +150,15 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     })
 
     // FIXME sequence will fail entire future rather than individual write
-    Future.sequence(inserts.map((jo: (String, JsonObject)) => {
-      val p = Promise[Try[Unit]]()
-      // TODO make persistTo configurable
-      couchbase.counter(config.bucket, 1, 0).flatMap { id =>
-        val withId = jo._2.put(Fields.Ordering, id)
-        couchbase.insert(JsonDocument.create(jo._1, withId))
-      }
-    })).map(writes => writes.map(_ => Success(())))
+    Future.sequence(inserts.map {
+      case (persistenceId, json) =>
+        val p = Promise[Try[Unit]]()
+        // TODO make persistTo configurable
+        couchbase.counter(config.bucket, 1, 0).flatMap { id =>
+          val withId = json.put(Fields.Ordering, id)
+          couchbase.insert(JsonDocument.create(persistenceId, withId))
+        }
+    }).map(writes => writes.map(_ => Success(())))
   }
 
   override def asyncDeleteMessagesTo(persistenceId: String, toSequenceNr: Long): Future[Unit] = {
