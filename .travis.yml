@@ -15,8 +15,13 @@ script:
 
 jobs:
   include:
-    - script: sbt headerCheck || { echo "[error] Missing license headers found. Please run 'headerCreate' and commit the updated code."; false; }
-      env: HEADER_SBT_CHECK
+    - stage: check
+      script: sbt headerCheck || { echo "[error] Missing license headers found. Please run 'headerCreate' and commit the updated code."; false; }
+      name: "Copyright header check"
+    - script: sbt scalafmtCheck || { echo "[error] Unformatted code found. Please run 'Test/compile' and commit the reformatted code."; false; }
+      name: "Code style check"
+    - script: sbt scalafmtSbtCheck || { echo "[error] Unformatted sbt code found. Please run 'scalafmtSbt' and commit the reformatted code."; false; }
+      name: "Build code style check"
     - env: CMD="Test/compile"
 
     - stage: whitesource
