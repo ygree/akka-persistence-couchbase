@@ -9,22 +9,42 @@ scala:
 jdk:
 - oraclejdk8
 
+script:
+- sbt -jvm-opts .jvmopts-travis "$CMD"
+
+
+jobs:
+  include:
+    - stage: check
+      script: sbt scalafmtCheck || { echo "[error] Unformatted code found. Please run 'Test/compile' and commit the reformatted code."; false; }
+      env: SCALAFMT_CHECK
+    - script: sbt scalafmtSbtCheck || { echo "[error] Unformatted sbt code found. Please run 'scalafmtSbt' and commit the reformatted code."; false; }
+      env: SCALAFMT_SBT_CHECK
+    - env: CMD="Test/compile"
+
+    - stage: whitesource
+      env: CMD=";whitesourceCheckPolicies ;whitesourceUpdate"
+      jdk: oraclejdk8
+
+stages:
+  # runs on master commits and PRs
+  - name: check
+    if: NOT tag =~ ^v
+
+  # runs on main repo master commits and version-tagged commits
+  - name: whitesource
+    if: repo = akka/alpakka-kafka AND ( ( branch = master AND type = push ) OR tag =~ ^v )
+
 before_cache:
-- find $HOME/.ivy2 -name "ivydata-*.properties" -print -delete
-- find $HOME/.sbt  -name "*.lock"               -print -delete
+- find $HOME/.ivy2/ -name "ivydata-*.properties" -print -delete
+- find $HOME/.sbt   -name "*.lock"               -print -delete
 
 cache:
   directories:
   - $HOME/.ivy2/cache
   - $HOME/.sbt/boot
 
-script:
-# need to override as the default is to test (can't do that yet)
-- sbt -++$TRAVIS_SCALA_VERSION update compile
-# check policies, if on master also upload
-- if [[ "$TRAVIS_SECURE_ENV_VARS" == "true" ]]; then if [[ "$TRAVIS_BRANCH" == "master" && "$TRAVIS_EVENT_TYPE" == "push" ]]; then sbt 'set credentials += Credentials("whitesource", "whitesourcesoftware.com", "", System.getenv("WHITESOURCE_KEY"))' whitesourceCheckPolicies whitesourceUpdate; else sbt 'set credentials += Credentials("whitesource", "whitesourcesoftware.com", "", System.getenv("WHITESOURCE_KEY"))' whitesourceCheckPolicies; fi ; fi
-
 env:
   global:
   # encrypt with: travis encrypt WHITESOURCE_KEY=...
-  - secure: "L/wJ7TbgY+oPULgbv+giFZejnQERfv/8/9Ex/nwRni8qnpxw5Q6BqB86Sch6b79irQiOdb+hr2tq3/m3KzXjC58xppRPfnmXsu3yI9XAln9WPi/sPvqUL8WPJmRfGswAw3L8w2JdD9VBP4iv0dWpRghGD27iqgipVRdN62PU+nU="
+  - secure: "dmWVfihnn9GFhFEf4PG7pESuthP7pHsjF8BLCQrtsTkAErkEHAMbxFMY89iv4Xyapp/9PUZAtEUi3f4CthTX5AdbbG4wfG59FLc6/aQNqZKQyKlHcVDlOsLjogTx3NDHnGmLjC6IQEtiO8lQzlhu1jaDK0yahnd8WWBLBxtf1j7LG8wbL41kbz8U+NEgLGRvIuxvPQAcWm/yPO4PLHfvYQxY6PJvgesF/B2e7z1ItvlQSJkcGPN3Y45cS/gJVJvCr3RAVuj4UDxQ7nO7jtjKJou09JkvYtHX7mDFumX1IaSWRHURPX0OoW895JUeORuZtXaPrcCWfJ8OSxa046NV8X5k4YoQYJ4KR7XWP5U2VbrcGl/Zb4/chHfJNxyK2rPqXzWfSN919rCJEdigDPAABzfjE4L6S7AsAPID2X33rOEhh0loQPYLK0+EltXO1mVw94c0E+JKeWoV1KQhMrJKIh1OXNUnV+a+VkClOktEJA2kT9TSWWvAMUJ3w65ejiR/1flFlnfKmiUPMj0qRGB4VGy9BISUMFGS9IZxC4atnEW11qRJwEkMnTuNcU4/I5P753m0t3cvDIfaqWf8KRDbPhKRRX9YKqrf1QLZWkU7653MjA26ikrONqJbOQMyxz/mi/exAkQiMxF6j0KgEp5tOMI+DppqEvCK8qNgbriaiXI="
