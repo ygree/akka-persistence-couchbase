@@ -4,8 +4,9 @@
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.query.N1qlQuery
-import com.couchbase.client.java.{ AsyncBucket, Cluster, CouchbaseCluster }
+import com.couchbase.client.java.{ Bucket, CouchbaseCluster }
 import com.lightbend.lagom.internal.persistence.ReadSideConfig
 import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{ CouchbasePersistentEntityRegistry, CouchbaseReadSideImpl, ScaladslCouchbaseOffsetStore }
 import com.lightbend.lagom.scaladsl.persistence.TestEntity.Evt
@@ -25,9 +26,10 @@ class CouchbaseReadSideSpec extends CouchbasePersistenceSpec(CouchbaseReadSideSp
 
   override protected lazy val persistentEntityRegistry = new CouchbasePersistentEntityRegistry(system)
 
-  private lazy val testSession: AsyncBucket = {
-    CouchbaseCluster.create().authenticate("admin", "admin1").openBucket("akka").async()
+  private lazy val bucket: Bucket = {
+    CouchbaseCluster.create().authenticate("admin", "admin1").openBucket("akka")
   }
+  private lazy val testSession: CouchbaseSession = CouchbaseSession(bucket)
   private lazy val offsetStore = new ScaladslCouchbaseOffsetStore(system, testSession, ReadSideConfig())
   private lazy val couchbaseReadSide = new CouchbaseReadSideImpl(system, testSession, offsetStore)
 

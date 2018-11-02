@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ * Copyright (C) 2016-2018 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package com.lightbend.lagom.scaladsl.persistence
@@ -40,7 +40,7 @@ trait AbstractReadSideSpec extends ImplicitSender with ScalaFutures with Eventua
 
   def eventStream[Event <: AggregateEvent[Event]](
     aggregateTag: AggregateEventTag[Event],
-    fromOffset:   Offset): Source[EventStreamElement[Event], NotUsed] =
+    fromOffset: Offset): Source[EventStreamElement[Event], NotUsed] =
     persistentEntityRegistry.eventStream(aggregateTag, fromOffset)
 
   def processorFactory(): ReadSideProcessor[TestEntity.Evt]

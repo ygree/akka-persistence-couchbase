@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ * Copyright (C) 2016-2018 Lightbend Inc. <https://www.lightbend.com>
  */
 
 package com.lightbend.lagom.scaladsl.persistence
@@ -9,6 +9,7 @@ import akka.actor.ActorSystem
 import akka.actor.Address
 import akka.cluster.Cluster
 import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.ReplyType
+import com.lightbend.lagom.scaladsl.persistence.testkit.SimulatedNullpointerException
 import com.lightbend.lagom.scaladsl.playjson.{ JsonSerializerRegistry, JsonSerializer }
 
 import scala.collection.immutable
@@ -20,11 +21,11 @@ object TestEntity {
 
     implicit val modeFormat = Format[Mode](
       Reads[Mode] {
-        case JsString("append")  => JsSuccess(Mode.Append)
+        case JsString("append") => JsSuccess(Mode.Append)
         case JsString("prepend") => JsSuccess(Mode.Prepend)
-        case js                  => JsError(s"unknown mode js: $js")
+        case js => JsError(s"unknown mode js: $js")
       }, Writes[Mode] {
-        case Mode.Append  => JsString("append")
+        case Mode.Append => JsString("append")
         case Mode.Prepend => JsString("prepend")
       })
   }
@@ -115,7 +116,7 @@ object TestEntity {
   final case class State(mode: Mode, elements: List[String]) {
     def add(elem: String): State = mode match {
       case Mode.Prepend => new State(mode, elem +: elements)
-      case Mode.Append  => new State(mode, elements :+ elem)
+      case Mode.Append => new State(mode, elements :+ elem)
     }
   }
 
@@ -148,7 +149,7 @@ class TestEntity(system: ActorSystem)
   override def initialState: State = State.empty
 
   override def behavior: Behavior = {
-    case State(Mode.Append, _)  => appending
+    case State(Mode.Append, _) => appending
     case State(Mode.Prepend, _) => prepending
   }
 
@@ -158,8 +159,8 @@ class TestEntity(system: ActorSystem)
         case (ChangeMode(mode), ctx, state) => {
           mode match {
             case mode if state.mode == mode => ctx.done
-            case Mode.Append                => ctx.thenPersist(InAppendMode)(ctx.reply)
-            case Mode.Prepend               => ctx.thenPersist(InPrependMode)(ctx.reply)
+            case Mode.Append => ctx.thenPersist(InAppendMode)(ctx.reply)
+            case Mode.Prepend => ctx.thenPersist(InPrependMode)(ctx.reply)
           }
         }
       }
@@ -189,13 +190,13 @@ class TestEntity(system: ActorSystem)
     baseActions
       .onEvent {
         case (Appended(elem), state) => state.add(elem)
-        case (InPrependMode, state)  => state.copy(mode = Mode.Prepend)
+        case (InPrependMode, state) => state.copy(mode = Mode.Prepend)
       }
       .onCommand[Add, Evt] {
         case (Add(elem, times), ctx, state) =>
           // note that null should trigger NPE, for testing exception
           if (elem == null)
-            throw new NullPointerException
+            throw new SimulatedNullpointerException
           if (elem.length == 0) {
             ctx.invalidCommand("element must not be empty");
             ctx.done
@@ -211,7 +212,7 @@ class TestEntity(system: ActorSystem)
     baseActions
       .onEvent {
         case (Prepended(elem), state) => state.add(elem)
-        case (InAppendMode, state)    => state.copy(mode = Mode.Append)
+        case (InAppendMode, state) => state.copy(mode = Mode.Append)
       }
       .onCommand[Add, Evt] {
         case (Add(elem, times), ctx, state) =>

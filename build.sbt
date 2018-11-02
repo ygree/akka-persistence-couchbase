@@ -77,8 +77,33 @@ lazy val lagomModules = Seq[Project](
   `lagom-persistence-couchbase-scaladsl`
 )
 
+/**
+  * This module contains copy-pasted parts from Lagom project that are not available outside of the project
+  * because they are not published as part of the result artifacts.
+  *
+  * This module combines the reusable parts that reside in Lagom project in next modules:
+  *
+  * persistence/core
+  * persistence/javadsl
+  * persistence/scaladsl
+  *
+  * For simplicity sake here they are combined into one module.
+  *
+  * TODO: It can be removed once it's resolved (see https://github.com/lagom/lagom/issues/1634)
+  */
+lazy val `copy-of-lagom-persistence-test` = (project in file("lagom-persistence-couchbase/copy-of-lagom-persistence-test"))
+  .settings(
+    //These block of settings is required for `sbt-travisci`,
+    //otherwise the build will fail with the "module not found: copy-of-lagom-persistence-test" error.
+    crossScalaVersions := Seq("2.11.12", "2.12.7"),
+    scalaVersion := crossScalaVersions.value.last
+  )
+  .settings(
+    libraryDependencies := Dependencies.`copy-of-lagom-persistence-test`
+  )
+
 lazy val `lagom-persistence-couchbase-core` = (project in file("lagom-persistence-couchbase/core"))
-  .dependsOn(core % "compile;test->test")
+  .dependsOn(core % "compile;test->test", couchbaseClient)
   .settings(common)
   .enablePlugins(AutomateHeaderPlugin)
   .settings(
@@ -88,8 +113,8 @@ lazy val `lagom-persistence-couchbase-core` = (project in file("lagom-persistenc
 
 lazy val `lagom-persistence-couchbase-javadsl` = (project in file("lagom-persistence-couchbase/javadsl"))
   .dependsOn(
-    core % "compile;test->test",
-    `lagom-persistence-couchbase-core` % "compile;test->test"
+    `lagom-persistence-couchbase-core` % "compile;test->test",
+    `copy-of-lagom-persistence-test` % "compile;test->test"
   )
   .settings(common)
   .enablePlugins(AutomateHeaderPlugin)
@@ -100,8 +125,8 @@ lazy val `lagom-persistence-couchbase-javadsl` = (project in file("lagom-persist
 
 lazy val `lagom-persistence-couchbase-scaladsl` = (project in file("lagom-persistence-couchbase/scaladsl"))
   .dependsOn(
-    core % "compile;test->test",
-    `lagom-persistence-couchbase-core` % "compile;test->test"
+    `lagom-persistence-couchbase-core` % "compile;test->test",
+    `copy-of-lagom-persistence-test` % "compile;test->test"
   )
   .settings(common)
   .enablePlugins(AutomateHeaderPlugin)
@@ -118,3 +143,4 @@ def formattingPreferences = {
     .setPreference(AlignSingleLineCaseStatements, true)
     .setPreference(SpacesAroundMultiImports, true)
 }
+
