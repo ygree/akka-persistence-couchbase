@@ -6,7 +6,7 @@ package com.lightbend.lagom.scaladsl.persistence.couchbase
 
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseAction
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
-import com.lightbend.lagom.scaladsl.persistence.{ AggregateEvent, EventStreamElement }
+import com.lightbend.lagom.scaladsl.persistence.{AggregateEvent, EventStreamElement}
 
 import scala.collection.immutable
 import scala.concurrent.Future
@@ -23,6 +23,7 @@ object CouchbaseReadSide {
    * Builder for the handler.
    */
   trait ReadSideHandlerBuilder[Event <: AggregateEvent[Event]] {
+
     /**
      * Define the event handler that will be used for events of a given class.
      *
@@ -32,7 +33,9 @@ object CouchbaseReadSide {
      * @param handler    The function to handle the events.
      * @return This builder for fluent invocation
      */
-    def setEventHandler[E <: Event: ClassTag](handler: EventStreamElement[E] => Future[immutable.Seq[CouchbaseAction]]): ReadSideHandlerBuilder[Event]
+    def setEventHandler[E <: Event: ClassTag](
+        handler: EventStreamElement[E] => Future[immutable.Seq[CouchbaseAction]]
+    ): ReadSideHandlerBuilder[Event]
 
     /**
      * Build the read side handler.
@@ -45,6 +48,7 @@ object CouchbaseReadSide {
 }
 
 trait CouchbaseReadSide {
+
   /**
    * Create a builder for a Cassandra read side event handler.
    *

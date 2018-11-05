@@ -71,29 +71,30 @@ lazy val lagomModules = Seq[Project](
 )
 
 /**
-  * This module contains copy-pasted parts from Lagom project that are not available outside of the project
-  * because they are not published as part of the result artifacts.
-  *
-  * This module combines the reusable parts that reside in Lagom project in next modules:
-  *
-  * persistence/core
-  * persistence/javadsl
-  * persistence/scaladsl
-  *
-  * For simplicity sake here they are combined into one module.
-  *
-  * TODO: It can be removed once it's resolved (see https://github.com/lagom/lagom/issues/1634)
-  */
-lazy val `copy-of-lagom-persistence-test` = (project in file("lagom-persistence-couchbase/copy-of-lagom-persistence-test"))
-  .settings(
-    //These block of settings is required for `sbt-travisci`,
-    //otherwise the build will fail with the "module not found: copy-of-lagom-persistence-test" error.
-    crossScalaVersions := Seq("2.11.12", "2.12.7"),
-    scalaVersion := crossScalaVersions.value.last
-  )
-  .settings(
-    libraryDependencies := Dependencies.`copy-of-lagom-persistence-test`
-  )
+ * This module contains copy-pasted parts from Lagom project that are not available outside of the project
+ * because they are not published as part of the result artifacts.
+ *
+ * This module combines the reusable parts that reside in Lagom project in next modules:
+ *
+ * persistence/core
+ * persistence/javadsl
+ * persistence/scaladsl
+ *
+ * For simplicity sake here they are combined into one module.
+ *
+ * TODO: It can be removed once it's resolved (see https://github.com/lagom/lagom/issues/1634)
+ */
+lazy val `copy-of-lagom-persistence-test` =
+  (project in file("lagom-persistence-couchbase/copy-of-lagom-persistence-test"))
+    .settings(
+      //These block of settings is required for `sbt-travisci`,
+      //otherwise the build will fail with the "module not found: copy-of-lagom-persistence-test" error.
+      crossScalaVersions := Seq("2.11.12", "2.12.7"),
+      scalaVersion := crossScalaVersions.value.last
+    )
+    .settings(
+      libraryDependencies := Dependencies.`copy-of-lagom-persistence-test`
+    )
 
 lazy val `lagom-persistence-couchbase-core` = (project in file("lagom-persistence-couchbase/core"))
   .dependsOn(core % "compile;test->test", couchbaseClient)

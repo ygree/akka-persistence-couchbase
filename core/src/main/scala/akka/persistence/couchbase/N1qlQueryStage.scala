@@ -5,12 +5,12 @@
 package akka.persistence.couchbase
 
 import akka.stream.stage._
-import akka.stream.{ Attributes, Outlet, SourceShape }
+import akka.stream.{Attributes, Outlet, SourceShape}
 import com.couchbase.client.java.AsyncBucket
 import com.couchbase.client.java.document.json.JsonObject
-import com.couchbase.client.java.query.{ AsyncN1qlQueryResult, AsyncN1qlQueryRow, N1qlQuery }
+import com.couchbase.client.java.query.{AsyncN1qlQueryResult, AsyncN1qlQueryRow, N1qlQuery}
 import rx.functions.Func1
-import rx.{ Observable, Subscriber }
+import rx.{Observable, Subscriber}
 
 import scala.concurrent.duration._
 
@@ -32,9 +32,15 @@ object N1qlQueryStage {
 
 // FIXME is this general enough that we can put it in the connector?
 // TODO pagination
-class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, namedParams: JsonObject, bucket: AsyncBucket,
-                        initialState: S, nextQuery: S => Option[N1qlQuery], updateState: (S, AsyncN1qlQueryRow) => S)
-  extends GraphStageWithMaterializedValue[SourceShape[AsyncN1qlQueryRow], N1qlQueryStage.Control] {
+class N1qlQueryStage[S](live: Boolean,
+                        pageSize: Int,
+                        initialQuery: N1qlQuery,
+                        namedParams: JsonObject,
+                        bucket: AsyncBucket,
+                        initialState: S,
+                        nextQuery: S => Option[N1qlQuery],
+                        updateState: (S, AsyncN1qlQueryRow) => S)
+    extends GraphStageWithMaterializedValue[SourceShape[AsyncN1qlQueryRow], N1qlQueryStage.Control] {
 
   import N1qlQueryStage._
 
@@ -128,11 +134,14 @@ class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, n
       state = Querying
       // FIXME deal with initial errors
       // FIXME passing a chunk across the async callback seems better than unfolding first?
-      bucket.query(query).flatMap(N1qlQueryStage.unfoldRows).subscribe(new Subscriber[AsyncN1qlQueryRow]() {
-        override def onCompleted(): Unit = completeCb.invoke(())
-        override def onError(t: Throwable): Unit = failedCb.invoke(t)
-        override def onNext(row: AsyncN1qlQueryRow): Unit = newRowCb.invoke(row)
-      })
+      bucket
+        .query(query)
+        .flatMap(N1qlQueryStage.unfoldRows)
+        .subscribe(new Subscriber[AsyncN1qlQueryRow]() {
+          override def onCompleted(): Unit = completeCb.invoke(())
+          override def onError(t: Throwable): Unit = failedCb.invoke(t)
+          override def onNext(row: AsyncN1qlQueryRow): Unit = newRowCb.invoke(row)
+        })
     }
 
     override def onPull(): Unit = {
@@ -165,7 +174,9 @@ class N1qlQueryStage[S](live: Boolean, pageSize: Int, initialQuery: N1qlQuery, n
     setHandler(out, this)
   }
 
-  override def createLogicAndMaterializedValue(inheritedAttributes: Attributes): (GraphStageLogic, N1qlQueryStage.Control) = {
+  override def createLogicAndMaterializedValue(
+      inheritedAttributes: Attributes
+  ): (GraphStageLogic, N1qlQueryStage.Control) = {
     val logic = new N1qlQueryStageLogic()
     (logic, logic)
   }

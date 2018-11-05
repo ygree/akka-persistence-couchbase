@@ -7,16 +7,16 @@ package akka.persistence.couchbase
 import java.util.Base64
 
 import akka.persistence.couchbase.CouchbaseJournal.Fields
-import akka.serialization.{ Serialization, Serializers }
+import akka.serialization.{Serialization, Serializers}
 import com.couchbase.client.java.document.json.JsonObject
 
 case class Serialized(identifier: Int, manifest: String, payload: Array[Byte]) {
-  def asJson(): JsonObject = {
-    JsonObject.create()
+  def asJson(): JsonObject =
+    JsonObject
+      .create()
       .put(Fields.SerializerManifest, manifest)
       .put(Fields.SerializerId, identifier)
       .put(Fields.Payload, Base64.getEncoder.encodeToString(payload))
-  }
 }
 
 object Serialized {

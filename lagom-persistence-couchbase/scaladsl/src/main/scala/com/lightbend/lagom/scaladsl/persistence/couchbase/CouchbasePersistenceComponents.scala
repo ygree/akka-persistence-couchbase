@@ -6,16 +6,27 @@ package com.lightbend.lagom.scaladsl.persistence.couchbase
 
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
-import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{ CouchbasePersistentEntityRegistry, CouchbaseReadSideImpl, ScaladslCouchbaseOffsetStore }
+import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{
+  CouchbasePersistentEntityRegistry,
+  CouchbaseReadSideImpl,
+  ScaladslCouchbaseOffsetStore
+}
 import com.lightbend.lagom.scaladsl.api.ServiceLocator
-import com.lightbend.lagom.scaladsl.persistence.{ PersistenceComponents, PersistentEntityRegistry, ReadSidePersistenceComponents, WriteSidePersistenceComponents }
+import com.lightbend.lagom.scaladsl.persistence.{
+  PersistenceComponents,
+  PersistentEntityRegistry,
+  ReadSidePersistenceComponents,
+  WriteSidePersistenceComponents
+}
 import com.lightbend.lagom.spi.persistence.OffsetStore
+
 /**
  * Persistence Couchbase components (for compile-time injection).
  */
-trait CouchbasePersistenceComponents extends PersistenceComponents
-  with ReadSideCouchbasePersistenceComponents
-  with WriteSideCouchbasePersistenceComponents
+trait CouchbasePersistenceComponents
+    extends PersistenceComponents
+    with ReadSideCouchbasePersistenceComponents
+    with WriteSideCouchbasePersistenceComponents
 
 /**
  * Write-side persistence Couchbase components (for compile-time injection).

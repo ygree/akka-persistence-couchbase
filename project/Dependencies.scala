@@ -21,27 +21,27 @@ object Dependencies {
     val akkaPersistence = "com.typesafe.akka" %% "akka-persistence" % AkkaVersion
     val akkaPersistenceQuery = "com.typesafe.akka" %% "akka-persistence-query" % AkkaVersion
 
-    val lagomPersistence =          "com.lightbend.lagom" %% "lagom-persistence-core"     % LagomVersion
-    val lagomPersistenceScalaDsl =  "com.lightbend.lagom" %% "lagom-scaladsl-persistence" % LagomVersion
-    val lagomPersistenceJavaDsl =   "com.lightbend.lagom" %% "lagom-javadsl-persistence"  % LagomVersion
-    val lagomPlayJson =             "com.lightbend.lagom" %% "lagom-scaladsl-play-json"   % LagomVersion
-    val lagomJavaDslJackson =       "com.lightbend.lagom" %% "lagom-javadsl-jackson"      % LagomVersion
+    val lagomPersistence = "com.lightbend.lagom" %% "lagom-persistence-core" % LagomVersion
+    val lagomPersistenceScalaDsl = "com.lightbend.lagom" %% "lagom-scaladsl-persistence" % LagomVersion
+    val lagomPersistenceJavaDsl = "com.lightbend.lagom" %% "lagom-javadsl-persistence" % LagomVersion
+    val lagomPlayJson = "com.lightbend.lagom" %% "lagom-scaladsl-play-json" % LagomVersion
+    val lagomJavaDslJackson = "com.lightbend.lagom" %% "lagom-javadsl-jackson" % LagomVersion
 
-    val slf4jApi = "org.slf4j"      % "slf4j-api"       % "1.7.25"
+    val slf4jApi = "org.slf4j" % "slf4j-api" % "1.7.25"
   }
 
   object Test {
-    val akkaPersistenceTck =    "com.typesafe.akka"       %% "akka-persistence-tck"    % AkkaVersion  % "test"
-    val akkaTestkit =           "com.typesafe.akka"       %% "akka-testkit"            % AkkaVersion  % "test"
-    val akkaStreamTestkit =     "com.typesafe.akka"       %% "akka-stream-testkit"     % AkkaVersion  % "test"
-    
-    val logback =               "ch.qos.logback"           % "logback-classic"         % "1.2.3"      % "test" // EPL 1.0 / LGPL 2.1
-    val scalaTest =             "org.scalatest"           %% "scalatest"               % "3.0.4"      % "test" // ApacheV2
-    val junit =                 "junit"                    % "junit"                   % "4.12"       % "test"
+    val akkaPersistenceTck = "com.typesafe.akka" %% "akka-persistence-tck" % AkkaVersion % "test"
+    val akkaTestkit = "com.typesafe.akka" %% "akka-testkit" % AkkaVersion % "test"
+    val akkaStreamTestkit = "com.typesafe.akka" %% "akka-stream-testkit" % AkkaVersion % "test"
 
-    val lagomTestKitScalaDsl    =  "com.lightbend.lagom"     %% "lagom-scaladsl-testkit"     % LagomVersion % "test"
-    val lagomTestKitJavaDsl     =  "com.lightbend.lagom"     %% "lagom-javadsl-testkit"      % LagomVersion % "test"
-    val lagomPersistenceTestKit =  "com.lightbend.lagom"     %% "lagom-persistence-testkit"  % LagomVersion % "test"
+    val logback = "ch.qos.logback" % "logback-classic" % "1.2.3" % "test" // EPL 1.0 / LGPL 2.1
+    val scalaTest = "org.scalatest" %% "scalatest" % "3.0.4" % "test" // ApacheV2
+    val junit = "junit" % "junit" % "4.12" % "test"
+
+    val lagomTestKitScalaDsl = "com.lightbend.lagom" %% "lagom-scaladsl-testkit" % LagomVersion % "test"
+    val lagomTestKitJavaDsl = "com.lightbend.lagom" %% "lagom-javadsl-testkit" % LagomVersion % "test"
+    val lagomPersistenceTestKit = "com.lightbend.lagom" %% "lagom-persistence-testkit" % LagomVersion % "test"
   }
 
   import Compile._
@@ -56,7 +56,6 @@ object Dependencies {
     logback,
     scalaTest
   )
-
 
   val couchbaseClient = Seq(
     akkaActor,

@@ -13,7 +13,7 @@ import com.lightbend.lagom.internal.scaladsl.persistence.AbstractPersistentEntit
  * Internal API
  */
 private[lagom] final class CouchbasePersistentEntityRegistry(system: ActorSystem)
-  extends AbstractPersistentEntityRegistry(system) {
+    extends AbstractPersistentEntityRegistry(system) {
 
   private val log = Logging.getLogger(system, getClass)
 

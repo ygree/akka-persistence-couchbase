@@ -8,7 +8,7 @@ import akka.annotation.DoNotInherit
 import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
 import akka.stream.alpakka.couchbase.impl.CouchbaseSessionImpl
 import akka.stream.scaladsl.Source
-import akka.{ Done, NotUsed }
+import akka.{Done, NotUsed}
 import com.couchbase.client.java.Bucket
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
@@ -40,6 +40,7 @@ trait CouchbaseSession {
    * @return A future that completes with the written document when the write completes,
    */
   def insert(document: JsonDocument): Future[JsonDocument]
+
   /**
    * Insert a document
    */
@@ -52,6 +53,7 @@ trait CouchbaseSession {
    * @return a future that completes when the upsert is done
    */
   def upsert(document: JsonDocument): Future[JsonDocument]
+
   /**
    * FIXME what happens if the id is missing?
    * @return a future that completes when the upsert is done
@@ -93,4 +95,3 @@ trait CouchbaseSession {
    */
   def close(): Future[Done]
 }
-
