@@ -26,17 +26,17 @@ jobs:
       name: "Code style check"
     - script: sbt scalafmtSbtCheck || { echo "[error] Unformatted sbt code found. Please run 'scalafmtSbt' and commit the reformatted code."; false; }
       name: "Build code style check"
+    #TODO: enable cross builds. Now not all of the modules are compilable with Scala 2.11
     - env: CMD="Test/compile"
 
     - stage: test
     - env:
         - PRE_CMD="docker-compose up -d couchbase"
-        - CMD=+couchbaseClient/test
+        - CMD=couchbaseClient/test
     #TODO: enable core tests
     # - env:
     #    - PRE_CMD="docker-compose up -d couchbase"
-    #    - CMD=+core/test
-    #TODO: enable cross-build
+    #    - CMD=core/test
     - env:
         - CMD=lagom-persistence-couchbase-core/test
     - env:
@@ -44,7 +44,6 @@ jobs:
         - CMD=lagom-persistence-couchbase-javadsl/test
     - env:
         - PRE_CMD="docker-compose up -d couchbase"
-        #TODO: enable cross-build
         - CMD=lagom-persistence-couchbase-scaladsl/test
 
     - stage: whitesource
@@ -58,7 +57,7 @@ stages:
 
   # runs on main repo master commits and version-tagged commits
   - name: whitesource
-    if: repo = akka/alpakka-kafka AND ( ( branch = master AND type = push ) OR tag =~ ^v )
+    if: repo = akka/akka-persistence-couchbase AND ( ( branch = master AND type = push ) OR tag =~ ^v )
 
 after_failure:
   - docker-compose logs
