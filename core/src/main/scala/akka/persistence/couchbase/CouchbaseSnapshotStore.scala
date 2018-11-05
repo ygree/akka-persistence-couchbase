@@ -69,7 +69,8 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
     )
 
     result.map {
-      case Some(value) =>
+      case Some(snapshot) =>
+        val value = snapshot.getObject("akka")
         Some(
           SelectedSnapshot(
             SnapshotMetadata(persistenceId, value.getLong(Fields.SequenceNr), value.getLong(Fields.Timestamp)),
