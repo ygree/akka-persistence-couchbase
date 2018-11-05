@@ -14,9 +14,9 @@ import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query.dsl.Expression._
-import com.couchbase.client.java.{ Cluster, CouchbaseCluster }
+import com.couchbase.client.java.{Cluster, CouchbaseCluster}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
+import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpec}
 
 import scala.concurrent.duration._
 
@@ -59,10 +59,7 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       val insertObject = JsonObject.create()
       insertObject.put("intVal", 1)
 
-      val inserted = session.insert(
-        JsonDocument.create(
-          "one",
-          insertObject)).futureValue
+      val inserted = session.insert(JsonDocument.create("one", insertObject)).futureValue
       inserted.id() should ===("one")
       inserted.content().getInt("intVal") should ===(1)
 

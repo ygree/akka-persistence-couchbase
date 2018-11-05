@@ -4,19 +4,24 @@
 
 package akka.persistence.couchbase
 
-import akka.actor.{ ActorRef, ActorSystem }
-import akka.persistence.query.{ Offset, PersistenceQuery }
+import akka.actor.{ActorRef, ActorSystem}
+import akka.persistence.query.{Offset, PersistenceQuery}
 import akka.stream.ActorMaterializer
 import akka.stream.testkit.scaladsl.TestSink
-import akka.testkit.{ ImplicitSender, TestKit }
+import akka.testkit.{ImplicitSender, TestKit}
 import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.query.N1qlQuery
-import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpecLike }
+import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 
 import scala.concurrent.duration._
 
-class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistenceIdSpec"))
-  with WordSpecLike with BeforeAndAfterAll with Matchers with ImplicitSender with CouchbaseBucketSetup {
+class EventsByPersistenceIdSpec
+    extends TestKit(ActorSystem("EventsByPersistenceIdSpec"))
+    with WordSpecLike
+    with BeforeAndAfterAll
+    with Matchers
+    with ImplicitSender
+    with CouchbaseBucketSetup {
 
   protected override def afterAll(): Unit = {
     super.afterAll()
@@ -46,7 +51,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       setup("a", 3)
 
       val src = queries.currentEventsByPersistenceId("a", 0L, Long.MaxValue)
-      src.map(_.event).runWith(TestSink.probe[Any])
+      src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(2)
         .expectNext("a-1", "a-2")
         .expectNoMessage(noMsgTimeout)
@@ -59,7 +66,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       setup("b", 10)
       val src = queries.currentEventsByPersistenceId("b", 5L, Long.MaxValue)
 
-      src.map(_.sequenceNr).runWith(TestSink.probe[Any])
+      src
+        .map(_.sequenceNr)
+        .runWith(TestSink.probe[Any])
         .request(7)
         .expectNext(5, 6, 7, 8, 9, 10)
         .expectComplete()
@@ -68,7 +77,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
     "not see any events if the stream starts after current latest event" in {
       setup("c", 3)
       val src = queries.currentEventsByPersistenceId("c", 5L, Long.MaxValue)
-      src.map(_.event).runWith(TestSink.probe[Any])
+      src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(5)
         .expectComplete()
     }
@@ -76,7 +87,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
     "find existing events up to a sequence number" in {
       setup("d", 3)
       val src = queries.currentEventsByPersistenceId("d", 0L, 2L)
-      src.map(_.sequenceNr).runWith(TestSink.probe[Any])
+      src
+        .map(_.sequenceNr)
+        .runWith(TestSink.probe[Any])
         .request(5)
         .expectNext(1, 2)
         .expectComplete()
@@ -86,7 +99,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       val ref = setup("e", 3)
 
       val src = queries.currentEventsByPersistenceId("e", 0L, Long.MaxValue)
-      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(2)
         .expectNext("e-1", "e-2")
         .expectNoMessage(noMsgTimeout)
@@ -105,7 +120,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       setup("f", 1000)
 
       val src = queries.currentEventsByPersistenceId("f", 0L, Long.MaxValue)
-      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(2)
         .expectNext("f-1", "f-2")
         .expectNoMessage(noMsgTimeout)
@@ -125,7 +142,8 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
     "stop if there are no events" in {
       val src = queries.currentEventsByPersistenceId("g", 0L, Long.MaxValue)
 
-      src.runWith(TestSink.probe[Any])
+      src
+        .runWith(TestSink.probe[Any])
         .request(2)
         .expectComplete()
     }
@@ -134,12 +152,11 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       setup("h", 3)
 
       val src = queries.currentEventsByPersistenceId("h", 0L, Long.MaxValue)
-      src.map(x => (x.persistenceId, x.sequenceNr, x.offset)).runWith(TestSink.probe[Any])
+      src
+        .map(x => (x.persistenceId, x.sequenceNr, x.offset))
+        .runWith(TestSink.probe[Any])
         .request(4)
-        .expectNext(
-          ("h", 1, Offset.sequence(1)),
-          ("h", 2, Offset.sequence(2)),
-          ("h", 3, Offset.sequence(3)))
+        .expectNext(("h", 1, Offset.sequence(1)), ("h", 2, Offset.sequence(2)), ("h", 3, Offset.sequence(3)))
         .expectComplete()
     }
 
@@ -147,7 +164,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       setup("i", 20)
 
       val src = queries.currentEventsByPersistenceId("i", 0L, Long.MaxValue)
-      src.map(_.event).runWith(TestSink.probe[Any])
+      src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(10)
         .expectNextN((1 to 10).map(i => s"i-$i"))
         .expectNoMessage(noMsgTimeout)
@@ -160,7 +179,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       setup("i2", 15) // partition size is 15
 
       val src = queries.currentEventsByPersistenceId("i2", 0L, Long.MaxValue)
-      src.map(_.event).runWith(TestSink.probe[Any])
+      src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(100)
         .expectNextN((1 to 15).map(i => s"i2-$i"))
         .expectComplete()
@@ -181,7 +202,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       expectMsg("i3-32-done")
 
       val src = queries.currentEventsByPersistenceId("i3", 0L, Long.MaxValue)
-      src.map(_.event).runWith(TestSink.probe[Any])
+      src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(10)
         .expectNextN((1 to 10).map(i => s"i3-$i"))
         .expectNoMessage(noMsgTimeout)
@@ -197,7 +220,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       setup("a2", queries.pageSize)
 
       val src = queries.currentEventsByPersistenceId("a2", 0L, Long.MaxValue)
-      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(queries.pageSize + 10)
 
       probe.expectNextN(queries.pageSize) should ===((1 to queries.pageSize).map(n => s"a2-$n").toList)
@@ -211,7 +236,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
     "find new events" in {
       val ref = setup("j", 3)
       val src = queries.eventsByPersistenceId("j", 0L, Long.MaxValue)
-      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(5)
         .expectNext("j-1", "j-2", "j-3")
 
@@ -225,7 +252,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
     "find new events if the stream starts after current latest event" in {
       val ref = setup("k", 4)
       val src = queries.eventsByPersistenceId("k", 5L, Long.MaxValue)
-      val probe = src.map(_.sequenceNr).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.sequenceNr)
+        .runWith(TestSink.probe[Any])
         .request(5)
         .expectNoMessage(noMsgTimeout)
 
@@ -246,7 +275,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
     "find new events up to a sequence number" in {
       val ref = setup("l", 3)
       val src = queries.eventsByPersistenceId("l", 0L, 4L)
-      val probe = src.map(_.sequenceNr).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.sequenceNr)
+        .runWith(TestSink.probe[Any])
         .request(5)
         .expectNext(1, 2, 3)
 
@@ -261,7 +292,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
     "find new events after demand request" in {
       val ref = setup("m", 3)
       val src = queries.eventsByPersistenceId("m", 0L, Long.MaxValue)
-      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(2)
         .expectNext("m-1", "m-2")
         .expectNoMessage(noMsgTimeout)
@@ -282,7 +315,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       setup("n", 1000)
 
       val src = queries.eventsByPersistenceId("n", 0L, Long.MaxValue)
-      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(2)
         .expectNext("n-1", "n-2")
         .expectNoMessage(noMsgTimeout)
@@ -305,7 +340,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       setup("o2", 1) // Database init.
       val src = queries.eventsByPersistenceId("o", 0L, Long.MaxValue)
 
-      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(10)
         .expectNoMessage(noMsgTimeout)
 
@@ -316,7 +353,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       setup("p2", 1) // Database init.
       val src = queries.eventsByPersistenceId("p", 0L, Long.MaxValue)
 
-      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(2)
         .expectNoMessage(noMsgTimeout)
 
@@ -334,7 +373,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
 
       val src = queries.eventsByPersistenceId("q", 0L, Long.MaxValue)
 
-      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(16)
         .expectNextN((1 to 15).map(i => s"q-$i"))
         .expectNoMessage(noMsgTimeout)
@@ -375,7 +416,9 @@ class EventsByPersistenceIdSpec extends TestKit(ActorSystem("EventsByPersistence
       expectMsg("q2-32-done")
 
       val src = queries.eventsByPersistenceId("q2", 0L, Long.MaxValue)
-      val probe = src.map(_.event).runWith(TestSink.probe[Any])
+      val probe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
         .request(10)
         .expectNextN((1 to 10).map(i => s"q2-$i"))
         .expectNoMessage(noMsgTimeout)

@@ -11,28 +11,32 @@ import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseAction
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
-import com.lightbend.lagom.scaladsl.persistence.{ AggregateEventTag, EventStreamElement, ReadSideProcessor, TestEntity }
+import com.lightbend.lagom.scaladsl.persistence.{AggregateEventTag, EventStreamElement, ReadSideProcessor, TestEntity}
 
 import scala.collection.immutable
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.{ExecutionContext, Future}
 
 object TestEntityReadSide {
-  class TestEntityReadSideProcessor(system: ActorSystem, readSide: CouchbaseReadSide, session: CouchbaseSession) extends ReadSideProcessor[TestEntity.Evt] {
+  class TestEntityReadSideProcessor(system: ActorSystem, readSide: CouchbaseReadSide, session: CouchbaseSession)
+      extends ReadSideProcessor[TestEntity.Evt] {
 
     def buildHandler(): ReadSideHandler[TestEntity.Evt] = {
       import system.dispatcher
 
-      def updateCount(element: EventStreamElement[TestEntity.Appended]): Future[immutable.Seq[CouchbaseAction]] = {
+      def updateCount(element: EventStreamElement[TestEntity.Appended]): Future[immutable.Seq[CouchbaseAction]] =
         Future.successful(immutable.Seq(new CouchbaseAction {
-          override def execute(ab: CouchbaseSession, ex: ExecutionContext): Future[Done] = {
-            getCount(ab, element.entityId).flatMap((count: Long) => {
-              ab.upsert(JsonDocument.create(s"count-${element.entityId}", JsonObject.create().put("count", count + 1)))
-            }).map(_ => Done)
-          }
+          override def execute(ab: CouchbaseSession, ex: ExecutionContext): Future[Done] =
+            getCount(ab, element.entityId)
+              .flatMap((count: Long) => {
+                ab.upsert(
+                  JsonDocument.create(s"count-${element.entityId}", JsonObject.create().put("count", count + 1))
+                )
+              })
+              .map(_ => Done)
         }))
-      }
 
-      readSide.builder[TestEntity.Evt]("testoffsets")
+      readSide
+        .builder[TestEntity.Evt]("testoffsets")
         .setEventHandler[TestEntity.Appended](updateCount)
         .build()
     }
@@ -41,12 +45,11 @@ object TestEntityReadSide {
 
   }
 
-  def getCount(session: CouchbaseSession, entityId: String)(implicit ec: ExecutionContext): Future[Long] = {
+  def getCount(session: CouchbaseSession, entityId: String)(implicit ec: ExecutionContext): Future[Long] =
     session.get(s"count-$entityId").map {
       case Some(l) => l.content().getLong("count")
-      case None    => 0L
+      case None => 0L
     }
-  }
 
 }
 
@@ -54,7 +57,6 @@ class TestEntityReadSide(system: ActorSystem, session: CouchbaseSession) {
 
   import system.dispatcher
 
-  def getAppendCount(entityId: String): Future[Long] = {
+  def getAppendCount(entityId: String): Future[Long] =
     TestEntityReadSide.getCount(session, entityId)
-  }
 }

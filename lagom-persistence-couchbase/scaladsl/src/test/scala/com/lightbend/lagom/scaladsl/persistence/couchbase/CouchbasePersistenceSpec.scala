@@ -18,7 +18,6 @@ import com.lightbend.lagom.scaladsl.playjson.JsonSerializerRegistry
 import com.typesafe.config.{Config, ConfigFactory}
 import com.lightbend.lagom.internal.persistence.testkit.PersistenceTestConfig._
 
-
 object CouchbasePersistenceSpec {
 
   val couchbaseConfigMap: Map[String, AnyRef] = Map(
@@ -32,27 +31,33 @@ object CouchbasePersistenceSpec {
 
 }
 
-class CouchbasePersistenceSpec private(system: ActorSystem) extends ActorSystemSpec(system) {
+class CouchbasePersistenceSpec private (system: ActorSystem) extends ActorSystemSpec(system) {
 
   import CouchbasePersistenceSpec._
 
-
   def this(testName: String, config: Config, jsonSerializerRegistry: JsonSerializerRegistry) =
-    this(ActorSystem(testName, ActorSystemSetup(
-      BootstrapSetup(
-        config
-          .withFallback(CouchbasePersistenceSpec.couchbaseConfig())
-          .withFallback(ClusterConfig)
-      ),
-      JsonSerializerRegistry.serializationSetupFor(jsonSerializerRegistry)
-    )))
+    this(
+      ActorSystem(
+        testName,
+        ActorSystemSetup(
+          BootstrapSetup(
+            config
+              .withFallback(CouchbasePersistenceSpec.couchbaseConfig())
+              .withFallback(ClusterConfig)
+          ),
+          JsonSerializerRegistry.serializationSetupFor(jsonSerializerRegistry)
+        )
+      )
+    )
 
-  def this(config: Config, jsonSerializerRegistry: JsonSerializerRegistry) = this(PersistenceSpec.getCallerName(getClass), config, jsonSerializerRegistry)
+  def this(config: Config, jsonSerializerRegistry: JsonSerializerRegistry) =
+    this(PersistenceSpec.getCallerName(getClass), config, jsonSerializerRegistry)
 
   def this(jsonSerializerRegistry: JsonSerializerRegistry) = this(ConfigFactory.empty(), jsonSerializerRegistry)
 
   override def beforeAll(): Unit = {
-    CouchbaseCluster.create()
+    CouchbaseCluster
+      .create()
       .authenticate("admin", "admin1")
       .openBucket("akka")
       .query(N1qlQuery.simple("delete from akka"))
@@ -64,8 +69,7 @@ class CouchbasePersistenceSpec private(system: ActorSystem) extends ActorSystemS
     cluster.join(cluster.selfAddress)
   }
 
-  override def afterAll(): Unit = {
+  override def afterAll(): Unit =
     super.afterAll()
-  }
 
 }
