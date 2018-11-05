@@ -14,6 +14,7 @@ import scala.concurrent.ExecutionContext
 /**
  * Internal API
  */
-private[lagom] final class ScaladslCouchbaseOffsetStore(system: ActorSystem, session: CouchbaseSession,
+private[lagom] final class ScaladslCouchbaseOffsetStore(system: ActorSystem,
+                                                        session: CouchbaseSession,
                                                         config: ReadSideConfig)(implicit ec: ExecutionContext)
-  extends CouchbaseOffsetStore(system, config, session)
+    extends CouchbaseOffsetStore(system, config, session)

@@ -4,9 +4,9 @@
 
 package com.lightbend.lagom.internal.persistence.couchbase
 
-import scala.concurrent.{ Future, Promise }
+import scala.concurrent.{Future, Promise}
 import scala.util.Success
-import akka.actor.{ ActorSystem, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider }
+import akka.actor.{ActorSystem, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
 import java.net.URI
 
 import scala.concurrent.duration._
@@ -34,16 +34,19 @@ private[lagom] class ServiceLocatorHolder(system: ExtendedActorSystem) extends E
   private implicit val exCtx = system.dispatcher
   private val delayed = {
     akka.pattern.after(TIMEOUT, using = system.scheduler) {
-      Future.failed(new NoServiceLocatorException(s"Timed out after $TIMEOUT while waiting for a ServiceLocator. Have you configured one?"))
+      Future.failed(
+        new NoServiceLocatorException(
+          s"Timed out after $TIMEOUT while waiting for a ServiceLocator. Have you configured one?"
+        )
+      )
     }
   }
 
   def serviceLocatorEventually: Future[ServiceLocatorAdapter] =
     Future firstCompletedOf Seq(promisedServiceLocator.future, delayed)
 
-  def setServiceLocator(locator: ServiceLocatorAdapter): Unit = {
+  def setServiceLocator(locator: ServiceLocatorAdapter): Unit =
     promisedServiceLocator.complete(Success(locator))
-  }
 }
 
 private[lagom] final class NoServiceLocatorException(msg: String) extends RuntimeException(msg) with NoStackTrace
@@ -54,4 +57,3 @@ private[lagom] final class NoServiceLocatorException(msg: String) extends Runtim
 private[lagom] trait ServiceLocatorAdapter {
   def locateAll(name: String): Future[List[URI]]
 }
-

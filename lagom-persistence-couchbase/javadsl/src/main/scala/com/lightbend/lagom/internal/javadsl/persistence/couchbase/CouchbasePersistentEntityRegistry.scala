@@ -6,7 +6,7 @@ package com.lightbend.lagom.internal.javadsl.persistence.couchbase
 
 import java.util.Optional
 
-import javax.inject.{ Inject, Singleton }
+import javax.inject.{Inject, Singleton}
 import akka.actor.ActorSystem
 import akka.event.Logging
 import akka.persistence.couchbase.CouchbaseReadJournal
@@ -17,8 +17,8 @@ import play.api.inject.Injector
  * Internal API
  */
 @Singleton
-private[lagom] final class CouchbasePersistentEntityRegistry @Inject() (system: ActorSystem, injector: Injector)
-  extends AbstractPersistentEntityRegistry(system, injector) {
+private[lagom] final class CouchbasePersistentEntityRegistry @Inject()(system: ActorSystem, injector: Injector)
+    extends AbstractPersistentEntityRegistry(system, injector) {
 
   private val log = Logging.getLogger(system, getClass)
 
@@ -27,4 +27,3 @@ private[lagom] final class CouchbasePersistentEntityRegistry @Inject() (system: 
   override protected val queryPluginId = Optional.of(CouchbaseReadJournal.Identifier)
 
 }
-

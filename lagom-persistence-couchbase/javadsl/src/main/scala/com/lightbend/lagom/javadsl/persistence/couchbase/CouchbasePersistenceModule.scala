@@ -11,16 +11,19 @@ import akka.persistence.couchbase.CouchbaseSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java._
 import com.google.inject.Provider
-import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{ CouchbasePersistentEntityRegistry, JavadslCouchbaseOffsetStore }
-import com.lightbend.lagom.internal.persistence.couchbase.{ ServiceLocatorAdapter, ServiceLocatorHolder }
+import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{
+  CouchbasePersistentEntityRegistry,
+  JavadslCouchbaseOffsetStore
+}
+import com.lightbend.lagom.internal.persistence.couchbase.{ServiceLocatorAdapter, ServiceLocatorHolder}
 import com.lightbend.lagom.javadsl.api.ServiceLocator
 import com.lightbend.lagom.javadsl.persistence.PersistentEntityRegistry
 import com.lightbend.lagom.spi.persistence.OffsetStore
 import com.typesafe.config.Config
 import javax.annotation.PostConstruct
 import javax.inject.Inject
-import play.api.inject.{ Binding, Injector, Module }
-import play.api.{ Configuration, Environment }
+import play.api.inject.{Binding, Injector, Module}
+import play.api.{Configuration, Environment}
 
 import scala.concurrent.Future
 import scala.util.Try
@@ -44,7 +47,7 @@ class CouchbasePersistenceModule extends Module {
 
 }
 
-private[lagom] class CouchbaseSessionProvider @Inject() (cfg: Config) extends Provider[CouchbaseSession] {
+private[lagom] class CouchbaseSessionProvider @Inject()(cfg: Config) extends Provider[CouchbaseSession] {
   private val config: CouchbaseSettings = CouchbaseSettings(cfg)
   //  private implicit val ec: ExecutionContext = context.dispatcher
 
@@ -57,19 +60,18 @@ private[lagom] class CouchbaseSessionProvider @Inject() (cfg: Config) extends Pr
 
   val session = CouchbaseSession(cluster.openBucket(config.bucket))
 
-  override def get(): CouchbaseSession = {
+  override def get(): CouchbaseSession =
     //TODO:
     session
-  }
 }
 
 private[lagom] object CouchbasePersistenceModule {
 
-  class InitServiceLocatorHolder @Inject() (system: ActorSystem, injector: Injector) {
+  class InitServiceLocatorHolder @Inject()(system: ActorSystem, injector: Injector) {
 
     // Guice doesn't support this, but other DI frameworks do.
     @PostConstruct
-    def init(): Unit = {
+    def init(): Unit =
       Try(injector.instanceOf[ServiceLocator]).foreach { locator =>
         ServiceLocatorHolder(system).setServiceLocator(new ServiceLocatorAdapter {
           override def locateAll(name: String): Future[List[URI]] = {
@@ -81,7 +83,6 @@ private[lagom] object CouchbasePersistenceModule {
           }
         })
       }
-    }
   }
 
 }

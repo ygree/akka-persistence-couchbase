@@ -7,11 +7,11 @@ package akka.persistence.couchbase
 import akka.dispatch.ExecutionContexts
 import akka.persistence.couchbase.CouchbaseJournal.Fields
 import akka.persistence.snapshot.SnapshotStore
-import akka.persistence.{ SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria }
+import akka.persistence.{SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria}
 import akka.serialization.SerializationExtension
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.document.JsonDocument
-import com.couchbase.client.java.document.json.{ JsonArray, JsonObject }
+import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
 import com.couchbase.client.java.error.DocumentDoesNotExistException
 import com.couchbase.client.java.query.Delete._
 import com.couchbase.client.java.query.Select.select
@@ -19,11 +19,11 @@ import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.Sort._
-import com.couchbase.client.java.query.{ N1qlQuery, _ }
-import com.couchbase.client.java.{ Cluster, CouchbaseCluster }
+import com.couchbase.client.java.query.{N1qlQuery, _}
+import com.couchbase.client.java.{Cluster, CouchbaseCluster}
 import com.typesafe.config.Config
 
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.{ExecutionContext, Future}
 
 // FIXME, share a Couchbase cluster between read/journal and snapshot
 // Make it an extension to look them up?
@@ -52,7 +52,6 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
    * limit 1
    *
    */
-
   def loadAsync(persistenceId: String, criteria: SnapshotSelectionCriteria): Future[Option[SelectedSnapshot]] = {
     val filter = snapshotFilter(criteria)
 
@@ -63,18 +62,20 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
       .limit(1)
 
     // FIXME, deal with errors
-    val result: Future[Option[JsonObject]] = couchbase.singleResponseQuery(N1qlQuery.parameterized(
-      query,
-      JsonArray.from("snapshot", persistenceId), N1qlParams.build().consistency(ScanConsistency.STATEMENT_PLUS)))
+    val result: Future[Option[JsonObject]] = couchbase.singleResponseQuery(
+      N1qlQuery.parameterized(query,
+                              JsonArray.from("snapshot", persistenceId),
+                              N1qlParams.build().consistency(ScanConsistency.STATEMENT_PLUS))
+    )
 
     result.map {
       case Some(value) =>
-        Some(SelectedSnapshot(
-          SnapshotMetadata(
-            persistenceId,
-            value.getLong(Fields.SequenceNr),
-            value.getLong(Fields.Timestamp)),
-          Serialized.fromJsonObject(serialization, value)))
+        Some(
+          SelectedSnapshot(
+            SnapshotMetadata(persistenceId, value.getLong(Fields.SequenceNr), value.getLong(Fields.Timestamp)),
+            Serialized.fromJsonObject(serialization, value)
+          )
+        )
       case None => None
     }
   }
@@ -82,7 +83,8 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
   def saveAsync(metadata: SnapshotMetadata, snapshot: Any): Future[Unit] = {
     val ser: Serialized = Serialized.serialize(serialization, snapshot.asInstanceOf[AnyRef])
 
-    val toStore: JsonObject = ser.asJson()
+    val toStore: JsonObject = ser
+      .asJson()
       .put(Fields.Type, "snapshot")
       .put(Fields.Timestamp, metadata.timestamp)
       .put(Fields.SequenceNr, metadata.sequenceNr)
@@ -90,13 +92,15 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
 
     val key = snapshotKey(metadata)
 
-    couchbase.upsert(JsonDocument.create(snapshotKey(metadata), toStore))
+    couchbase
+      .upsert(JsonDocument.create(snapshotKey(metadata), toStore))
       .map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
   def deleteAsync(metadata: SnapshotMetadata): Future[Unit] = {
     val key = snapshotKey(metadata)
-    couchbase.remove(key)
+    couchbase
+      .remove(key)
       .recover {
         case _: DocumentDoesNotExistException => ()
       }
@@ -106,13 +110,15 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
   def deleteAsync(persistenceId: String, criteria: SnapshotSelectionCriteria): Future[Unit] = {
     val filter = snapshotFilter(criteria)
     val query = N1qlQuery.parameterized(deleteFrom("akka")
-      .where(filter), JsonArray.from("snapshot", persistenceId))
+                                          .where(filter),
+                                        JsonArray.from("snapshot", persistenceId))
 
     couchbase.singleResponseQuery(query).map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
   private def snapshotFilter(criteria: SnapshotSelectionCriteria): Expression = {
-    var filter = x("akka.type").eq("$1")
+    var filter = x("akka.type")
+      .eq("$1")
       .and(x(Fields.PersistenceId).eq("$2"))
 
     if (criteria.maxSequenceNr != Long.MaxValue)
@@ -130,8 +136,7 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
     filter
   }
 
-  private def snapshotKey(metadata: SnapshotMetadata): String = {
+  private def snapshotKey(metadata: SnapshotMetadata): String =
     s"${metadata.persistenceId}-${metadata.sequenceNr}"
-  }
 
 }
