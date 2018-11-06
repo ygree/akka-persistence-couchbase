@@ -6,19 +6,24 @@ package akka.persistence.couchbase
 
 import akka.actor.ActorSystem
 import akka.persistence.query.scaladsl.EventsByTagQuery
-import akka.persistence.query.{ EventEnvelope, NoOffset, PersistenceQuery }
+import akka.persistence.query.{EventEnvelope, NoOffset, PersistenceQuery}
 import akka.stream.ActorMaterializer
 import akka.stream.testkit.TestSubscriber
 import akka.stream.testkit.scaladsl.TestSink
-import akka.testkit.{ TestKit, TestProbe }
+import akka.testkit.{TestKit, TestProbe}
 import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.query.N1qlQuery
-import org.scalatest.{ BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike }
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike}
 
 import scala.concurrent.duration._
 
-class CouchbaseReadJournalSpec extends TestKit(ActorSystem("CouchbaseReadJournalSpec"))
-  with WordSpecLike with BeforeAndAfterAll with Matchers with CouchbaseBucketSetup with BeforeAndAfterEach {
+class CouchbaseReadJournalSpec
+    extends TestKit(ActorSystem("CouchbaseReadJournalSpec"))
+    with WordSpecLike
+    with BeforeAndAfterAll
+    with Matchers
+    with CouchbaseBucketSetup
+    with BeforeAndAfterEach {
 
   protected override def afterAll(): Unit = {
     super.afterAll()

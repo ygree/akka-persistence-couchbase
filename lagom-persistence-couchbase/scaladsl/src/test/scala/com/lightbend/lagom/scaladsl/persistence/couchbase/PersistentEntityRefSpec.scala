@@ -7,37 +7,46 @@ package com.lightbend.lagom.scaladsl.persistence.couchbase
 import java.io.File
 
 import akka.actor.setup.ActorSystemSetup
-import akka.actor.{ ActorSystem, BootstrapSetup }
+import akka.actor.{ActorSystem, BootstrapSetup}
 import akka.cluster.Cluster
 import akka.pattern.AskTimeoutException
-import akka.stream.{ ActorMaterializer, Materializer }
+import akka.stream.{ActorMaterializer, Materializer}
 import akka.testkit.TestKit
 import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.query.N1qlQuery
 import com.lightbend.lagom.internal.persistence.testkit.AwaitPersistenceInit.awaitPersistenceInit
 import com.lightbend.lagom.scaladsl.api.ServiceLocator
 import com.lightbend.lagom.scaladsl.api.ServiceLocator.NoServiceLocator
-import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.{ InvalidCommandException, UnhandledCommandException }
+import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.{InvalidCommandException, UnhandledCommandException}
 import com.lightbend.lagom.scaladsl.persistence.TestEntity.Mode
-import com.lightbend.lagom.scaladsl.persistence.{ PersistentEntity, PersistentEntityRegistry, TestEntity, TestEntitySerializerRegistry }
+import com.lightbend.lagom.scaladsl.persistence.{
+  PersistentEntity,
+  PersistentEntityRegistry,
+  TestEntity,
+  TestEntitySerializerRegistry
+}
 import com.lightbend.lagom.scaladsl.playjson.JsonSerializerRegistry
-import com.typesafe.config.{ Config, ConfigFactory }
+import com.typesafe.config.{Config, ConfigFactory}
 import org.scalactic.TypeCheckedTripleEquals
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpecLike }
-import play.api.{ Environment, Mode => PlayMode }
+import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
+import play.api.{Environment, Mode => PlayMode}
 import com.lightbend.lagom.internal.persistence.testkit.PersistenceTestConfig._
 
 import scala.concurrent.duration._
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.{ExecutionContext, Future}
 
-class PersistentEntityRefSpec extends WordSpecLike with Matchers with BeforeAndAfterAll with ScalaFutures with TypeCheckedTripleEquals {
+class PersistentEntityRefSpec
+    extends WordSpecLike
+    with Matchers
+    with BeforeAndAfterAll
+    with ScalaFutures
+    with TypeCheckedTripleEquals {
 
   override implicit val patienceConfig = PatienceConfig(5.seconds, 150.millis)
 
-  val config: Config = ConfigFactory.parseString(
-    """
+  val config: Config = ConfigFactory.parseString("""
       akka.actor.provider = akka.cluster.ClusterActorRefProvider
       akka.remote.netty.tcp.port = 0
       akka.remote.netty.tcp.hostname = 127.0.0.1
@@ -45,14 +54,16 @@ class PersistentEntityRefSpec extends WordSpecLike with Matchers with BeforeAndA
       akka.cluster.sharding.distributed-data.durable.keys = []
   """).withFallback(CouchbasePersistenceSpec.couchbaseConfig())
 
-  private val system: ActorSystem = ActorSystem("PersistentEntityRefSpec", ActorSystemSetup(
-    BootstrapSetup(config),
-    JsonSerializerRegistry.serializationSetupFor(TestEntitySerializerRegistry)))
+  private val system: ActorSystem = ActorSystem(
+    "PersistentEntityRefSpec",
+    ActorSystemSetup(BootstrapSetup(config), JsonSerializerRegistry.serializationSetupFor(TestEntitySerializerRegistry))
+  )
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     // FIXME, stop creating a new one of these
-    CouchbaseCluster.create()
+    CouchbaseCluster
+      .create()
       .authenticate("admin", "admin1")
       .openBucket("akka")
       .query(N1qlQuery.simple("delete from akka"))
@@ -97,7 +108,8 @@ class PersistentEntityRefSpec extends WordSpecLike with Matchers with BeforeAndA
 
     "send commands to the registry" in {
       val ref1 = registry.refFor[TestEntity]("1")
-      ref1.ask(TestEntity.Add("a"))
+      ref1
+        .ask(TestEntity.Add("a"))
         .futureValue(Timeout(15.seconds)) should ===(TestEntity.Appended("A"))
 
       val ref2 = registry.refFor[TestEntity]("2")

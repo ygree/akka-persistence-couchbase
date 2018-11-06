@@ -14,13 +14,13 @@ import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query.dsl.Expression._
-import com.couchbase.client.java.{ Cluster, CouchbaseCluster }
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
+import com.couchbase.client.java.{Cluster, CouchbaseCluster}
+import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpec}
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 import scala.concurrent.duration._
 
-class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with BeforeAndAfterAll {
+class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with BeforeAndAfterAll with Eventually {
 
   // FIXME use a automagic docker-couchbase
   // currently requires a running couchbase with an admin account named 'admin' with password 'admin1'
@@ -59,10 +59,7 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       val insertObject = JsonObject.create()
       insertObject.put("intVal", 1)
 
-      val inserted = session.insert(
-        JsonDocument.create(
-          "one",
-          insertObject)).futureValue
+      val inserted = session.insert(JsonDocument.create("one", insertObject)).futureValue
       inserted.id() should ===("one")
       inserted.content().getInt("intVal") should ===(1)
 
@@ -81,9 +78,12 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       val query = select("*")
         .from(bucketName)
         .where(x("intVal").eq(3))
-      val queryResult = session.singleResponseQuery(query).futureValue
 
-      queryResult should not be empty
+      val queryResult = eventually {
+        val result = session.singleResponseQuery(query).futureValue
+        result should not be empty
+        result
+      }
 
       // FIXME can we hide this nesting in query results or does it make sense to keep for some reason?
       val queryObject = queryResult.get.getObject(bucketName)

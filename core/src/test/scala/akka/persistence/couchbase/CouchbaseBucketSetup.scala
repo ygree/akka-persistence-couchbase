@@ -5,13 +5,13 @@
 package akka.persistence.couchbase
 
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
-import com.couchbase.client.java.{ Cluster, CouchbaseCluster }
+import com.couchbase.client.java.{Cluster, CouchbaseCluster}
 import com.couchbase.client.java.bucket.BucketType
 import com.couchbase.client.java.cluster.DefaultBucketSettings
 import com.couchbase.client.java.query.Index
 import com.couchbase.client.java.query.dsl.clause._
 import com.couchbase.client.java.query.dsl.Expression._
-import org.scalatest.{ BeforeAndAfterAll, Suite }
+import org.scalatest.{BeforeAndAfterAll, Suite}
 
 trait CouchbaseBucketSetup extends BeforeAndAfterAll { self: Suite =>
 

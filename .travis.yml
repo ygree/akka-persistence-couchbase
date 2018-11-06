@@ -1,17 +1,21 @@
 language: scala
 
-sudo: false
+sudo: required
+
+services:
+  - docker
 
 scala:
-- "2.12.7"
-- "2.11.12"
+  - "2.12.7"
+  - "2.11.12"
 
 jdk:
-- oraclejdk8
+  - oraclejdk8
 
+# default script for jobs, that do not have any specified
 script:
-- sbt -jvm-opts .jvmopts-travis "$CMD"
-
+  - ${PRE_CMD:=return 0} # do nothing if not set
+  - sbt -jvm-opts .jvmopts-travis "$CMD"
 
 jobs:
   include:
@@ -22,7 +26,25 @@ jobs:
       name: "Code style check"
     - script: sbt scalafmtSbtCheck || { echo "[error] Unformatted sbt code found. Please run 'scalafmtSbt' and commit the reformatted code."; false; }
       name: "Build code style check"
+    #TODO: enable cross builds by adding '+' in front of the command. Now not all the modules are compilable with Scala 2.11
     - env: CMD="Test/compile"
+
+    - stage: test
+    - env:
+        - PRE_CMD="docker-compose up -d couchbase"
+        - CMD=couchbaseClient/test
+    #TODO: enable core tests
+    # - env:
+    #    - PRE_CMD="docker-compose up -d couchbase"
+    #    - CMD=core/test
+    - env:
+        - CMD=lagom-persistence-couchbase-core/test
+    - env:
+        - PRE_CMD="docker-compose up -d couchbase"
+        - CMD=lagom-persistence-couchbase-javadsl/test
+    - env:
+        - PRE_CMD="docker-compose up -d couchbase"
+        - CMD=lagom-persistence-couchbase-scaladsl/test
 
     - stage: whitesource
       env: CMD=";whitesourceCheckPolicies ;whitesourceUpdate"
@@ -35,18 +57,22 @@ stages:
 
   # runs on main repo master commits and version-tagged commits
   - name: whitesource
-    if: repo = akka/alpakka-kafka AND ( ( branch = master AND type = push ) OR tag =~ ^v )
+    if: repo = akka/akka-persistence-couchbase AND ( ( branch = master AND type = push ) OR tag =~ ^v )
+
+after_failure:
+  - docker-compose logs
+  - find . -name "*.log" -exec ./scripts/cat-log.sh {} \;
 
 before_cache:
-- find $HOME/.ivy2/ -name "ivydata-*.properties" -print -delete
-- find $HOME/.sbt   -name "*.lock"               -print -delete
+  - find $HOME/.ivy2/ -name "ivydata-*.properties" -print -delete
+  - find $HOME/.sbt   -name "*.lock"               -print -delete
 
 cache:
   directories:
-  - $HOME/.ivy2/cache
-  - $HOME/.sbt/boot
+    - $HOME/.ivy2/cache
+    - $HOME/.sbt/boot
 
 env:
   global:
-  # encrypt with: travis encrypt WHITESOURCE_KEY=...
-  - secure: "dmWVfihnn9GFhFEf4PG7pESuthP7pHsjF8BLCQrtsTkAErkEHAMbxFMY89iv4Xyapp/9PUZAtEUi3f4CthTX5AdbbG4wfG59FLc6/aQNqZKQyKlHcVDlOsLjogTx3NDHnGmLjC6IQEtiO8lQzlhu1jaDK0yahnd8WWBLBxtf1j7LG8wbL41kbz8U+NEgLGRvIuxvPQAcWm/yPO4PLHfvYQxY6PJvgesF/B2e7z1ItvlQSJkcGPN3Y45cS/gJVJvCr3RAVuj4UDxQ7nO7jtjKJou09JkvYtHX7mDFumX1IaSWRHURPX0OoW895JUeORuZtXaPrcCWfJ8OSxa046NV8X5k4YoQYJ4KR7XWP5U2VbrcGl/Zb4/chHfJNxyK2rPqXzWfSN919rCJEdigDPAABzfjE4L6S7AsAPID2X33rOEhh0loQPYLK0+EltXO1mVw94c0E+JKeWoV1KQhMrJKIh1OXNUnV+a+VkClOktEJA2kT9TSWWvAMUJ3w65ejiR/1flFlnfKmiUPMj0qRGB4VGy9BISUMFGS9IZxC4atnEW11qRJwEkMnTuNcU4/I5P753m0t3cvDIfaqWf8KRDbPhKRRX9YKqrf1QLZWkU7653MjA26ikrONqJbOQMyxz/mi/exAkQiMxF6j0KgEp5tOMI+DppqEvCK8qNgbriaiXI="
+    # encrypt with: travis encrypt WHITESOURCE_KEY=...
+    - secure: "dmWVfihnn9GFhFEf4PG7pESuthP7pHsjF8BLCQrtsTkAErkEHAMbxFMY89iv4Xyapp/9PUZAtEUi3f4CthTX5AdbbG4wfG59FLc6/aQNqZKQyKlHcVDlOsLjogTx3NDHnGmLjC6IQEtiO8lQzlhu1jaDK0yahnd8WWBLBxtf1j7LG8wbL41kbz8U+NEgLGRvIuxvPQAcWm/yPO4PLHfvYQxY6PJvgesF/B2e7z1ItvlQSJkcGPN3Y45cS/gJVJvCr3RAVuj4UDxQ7nO7jtjKJou09JkvYtHX7mDFumX1IaSWRHURPX0OoW895JUeORuZtXaPrcCWfJ8OSxa046NV8X5k4YoQYJ4KR7XWP5U2VbrcGl/Zb4/chHfJNxyK2rPqXzWfSN919rCJEdigDPAABzfjE4L6S7AsAPID2X33rOEhh0loQPYLK0+EltXO1mVw94c0E+JKeWoV1KQhMrJKIh1OXNUnV+a+VkClOktEJA2kT9TSWWvAMUJ3w65ejiR/1flFlnfKmiUPMj0qRGB4VGy9BISUMFGS9IZxC4atnEW11qRJwEkMnTuNcU4/I5P753m0t3cvDIfaqWf8KRDbPhKRRX9YKqrf1QLZWkU7653MjA26ikrONqJbOQMyxz/mi/exAkQiMxF6j0KgEp5tOMI+DppqEvCK8qNgbriaiXI="

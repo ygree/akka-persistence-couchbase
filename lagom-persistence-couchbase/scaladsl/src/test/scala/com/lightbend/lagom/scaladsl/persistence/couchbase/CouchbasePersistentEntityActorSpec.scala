@@ -4,6 +4,8 @@
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
-import com.lightbend.lagom.scaladsl.persistence.{ AbstractPersistentEntityActorSpec, TestEntitySerializerRegistry }
+import com.lightbend.lagom.scaladsl.persistence.{AbstractPersistentEntityActorSpec, TestEntitySerializerRegistry}
 
-class CouchbasePersistentEntityActorSpec extends CouchbasePersistenceSpec(TestEntitySerializerRegistry) with AbstractPersistentEntityActorSpec
+class CouchbasePersistentEntityActorSpec
+    extends CouchbasePersistenceSpec(TestEntitySerializerRegistry)
+    with AbstractPersistentEntityActorSpec

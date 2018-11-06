@@ -9,5 +9,4 @@ import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.query.N1qlQuery
 import com.typesafe.config.ConfigFactory
 
-class CouchbaseSnapshotStoreSpec extends SnapshotStoreSpec(ConfigFactory.load()) with CouchbaseBucketSetup {
-}
+class CouchbaseSnapshotStoreSpec extends SnapshotStoreSpec(ConfigFactory.load()) with CouchbaseBucketSetup {}

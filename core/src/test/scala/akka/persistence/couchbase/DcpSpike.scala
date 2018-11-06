@@ -17,7 +17,8 @@ import scala.io.StdIn
 
 object DcpSpike extends App {
 
-  val client = Client.configure()
+  val client = Client
+    .configure()
     .credentialsProvider(new StaticCredentialsProvider("admin", "admin1"))
     .hostnames("localhost")
     .bucket("akka")

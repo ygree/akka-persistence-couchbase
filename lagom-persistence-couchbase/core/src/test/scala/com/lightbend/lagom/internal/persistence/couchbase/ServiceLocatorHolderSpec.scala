@@ -5,7 +5,7 @@
 package com.lightbend.lagom.internal.persistence.couchbase
 
 import akka.actor.ActorSystem
-import org.scalatest.{ MustMatchers, WordSpec }
+import org.scalatest.{MustMatchers, WordSpec}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -16,8 +16,7 @@ class ServiceLocatorHolderSpec extends WordSpec with MustMatchers {
   "ServiceLocatorHolder" should {
     "timeout when no service locator is found" in {
       val eventually = ServiceLocatorHolder(system).serviceLocatorEventually
-      assertThrows[NoServiceLocatorException](
-        Await.result(eventually, ServiceLocatorHolder.TIMEOUT + 2.seconds))
+      assertThrows[NoServiceLocatorException](Await.result(eventually, ServiceLocatorHolder.TIMEOUT + 2.seconds))
     }
   }
 }
