@@ -9,8 +9,6 @@ import akka.persistence.query.{Offset, PersistenceQuery}
 import akka.stream.ActorMaterializer
 import akka.stream.testkit.scaladsl.TestSink
 import akka.testkit.{ImplicitSender, TestKit}
-import com.couchbase.client.java.CouchbaseCluster
-import com.couchbase.client.java.query.N1qlQuery
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 
 import scala.concurrent.duration._
@@ -21,7 +19,8 @@ class EventsByPersistenceIdSpec
     with BeforeAndAfterAll
     with Matchers
     with ImplicitSender
-    with CouchbaseBucketSetup {
+    with CouchbaseBucketSetup
+    with SuppressedLogging {
 
   protected override def afterAll(): Unit = {
     super.afterAll()
