@@ -112,7 +112,8 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
     val filter = snapshotFilter(criteria)
     val query = N1qlQuery.parameterized(deleteFrom("akka")
                                           .where(filter),
-                                        JsonArray.from("snapshot", persistenceId))
+                                        JsonArray.from("snapshot", persistenceId),
+                                        N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS))
 
     couchbase.singleResponseQuery(query).map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }

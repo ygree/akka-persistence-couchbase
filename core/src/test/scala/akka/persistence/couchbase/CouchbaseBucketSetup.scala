@@ -4,50 +4,40 @@
 
 package akka.persistence.couchbase
 
+import java.util.concurrent.TimeUnit
+
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.{Cluster, CouchbaseCluster}
-import com.couchbase.client.java.bucket.BucketType
-import com.couchbase.client.java.cluster.DefaultBucketSettings
-import com.couchbase.client.java.query.Index
-import com.couchbase.client.java.query.dsl.clause._
-import com.couchbase.client.java.query.dsl.Expression._
+import com.couchbase.client.java.query.N1qlQuery
 import org.scalatest.{BeforeAndAfterAll, Suite}
+
+import scala.util.Try
 
 trait CouchbaseBucketSetup extends BeforeAndAfterAll { self: Suite =>
 
   var session: CouchbaseSession = _
+  var cluster: Cluster = _
 
   override protected def beforeAll(): Unit = {
+
     val bucketName = "akka"
-    val cluster: Cluster = {
-      val c = CouchbaseCluster.create()
-      c.authenticate("admin", "admin1") // needs to be admin
-      val manager = c.clusterManager()
+    cluster = CouchbaseCluster
+      .create()
+      .authenticate("admin", "admin1") // needs to be admin
 
-      // make sure each test run is from a clean slate
-      if (manager.hasBucket(bucketName)) {
-        manager.removeBucket(bucketName)
-      }
-      val bucketSettings = new DefaultBucketSettings.Builder()
-        .`type`(BucketType.COUCHBASE)
-        .name(bucketName)
-        .quota(100)
-        .build()
-      manager.insertBucket(bucketSettings)
-
-      c
-    }
     val bucket = cluster.openBucket(bucketName)
-    bucket.bucketManager().createN1qlIndex("pi2", true, false, "persistence_id", "sequence_from")
-    // FIXME figure out how to create that tags index
-    // bucket.bucketManager().createN1qlIndex("tags", true, false, Index.createIndex("tags").on(bucketName, x(""), x("ordering"))
+
+    val result = bucket.query(N1qlQuery.simple("delete from akka"), 1, TimeUnit.MINUTES)
+    assert(result.finalSuccess())
+
     session = CouchbaseSession(bucket)
+
     super.beforeAll()
   }
 
   override protected def afterAll(): Unit = {
-    // FIXME drop bucket as well?
-    session.close()
+    Try(session.close())
+    Try(cluster.disconnect())
     super.afterAll()
   }
 

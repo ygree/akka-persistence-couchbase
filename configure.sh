@@ -43,7 +43,7 @@ couchbase-cli cluster-init -c 127.0.0.1 --cluster-username $USERNAME --cluster-p
 # Create the bucket
 log "$(date +"%T") Create buckets ........."
 couchbase-cli bucket-create -c 127.0.0.1 --username $USERNAME --password $PASSWORD --bucket-type couchbase \
-  --bucket-ramsize 100 --bucket $BUCKET --enable-flush 1
+  --bucket-ramsize 512 --bucket $BUCKET --enable-flush 1
 
 # Need to wait until query service is ready to process N1QL queries
 log "$(date +"%T") Waiting ........."

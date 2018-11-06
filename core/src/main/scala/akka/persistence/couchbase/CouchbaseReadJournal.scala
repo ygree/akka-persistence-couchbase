@@ -212,7 +212,9 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     // to do the live queries
     // this can fail as it relies on async updates to the index.
     val query = select(distinct(Fields.PersistenceId)).from(settings.bucket).where(x(Fields.PersistenceId).isNotNull)
-    session.streamedQuery(query).map(_.getString(Fields.PersistenceId))
+    val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+
+    session.streamedQuery(N1qlQuery.simple(query, queryParams)).map(_.getString(Fields.PersistenceId))
   }
 
   /*
