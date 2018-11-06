@@ -27,7 +27,7 @@ trait CouchbaseBucketSetup extends BeforeAndAfterAll { self: Suite =>
 
     val bucket = cluster.openBucket(bucketName)
 
-    val result = bucket.query(N1qlQuery.simple("delete from akka"), 1, TimeUnit.MINUTES)
+    val result = bucket.query(N1qlQuery.simple("delete from akka"), 5, TimeUnit.MINUTES)
     assert(result.finalSuccess())
 
     session = CouchbaseSession(bucket)
