@@ -4,19 +4,15 @@
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
-import java.io.File
-
 import akka.actor.setup.ActorSystemSetup
 import akka.actor.{ActorSystem, BootstrapSetup}
 import akka.cluster.Cluster
-import com.couchbase.client.java.CouchbaseCluster
-import com.couchbase.client.java.query.N1qlQuery
+import akka.persistence.couchbase.CouchbaseBucketSetup
 import com.lightbend.lagom.internal.persistence.testkit.AwaitPersistenceInit.awaitPersistenceInit
-import com.lightbend.lagom.persistence.PersistenceSpec
-import com.lightbend.lagom.persistence.ActorSystemSpec
+import com.lightbend.lagom.internal.persistence.testkit.PersistenceTestConfig._
+import com.lightbend.lagom.persistence.{ActorSystemSpec, PersistenceSpec}
 import com.lightbend.lagom.scaladsl.playjson.JsonSerializerRegistry
 import com.typesafe.config.{Config, ConfigFactory}
-import com.lightbend.lagom.internal.persistence.testkit.PersistenceTestConfig._
 
 object CouchbasePersistenceSpec {
 
@@ -31,9 +27,7 @@ object CouchbasePersistenceSpec {
 
 }
 
-class CouchbasePersistenceSpec private (system: ActorSystem) extends ActorSystemSpec(system) {
-
-  import CouchbasePersistenceSpec._
+class CouchbasePersistenceSpec private (system: ActorSystem) extends ActorSystemSpec(system) with CouchbaseBucketSetup {
 
   def this(testName: String, config: Config, jsonSerializerRegistry: JsonSerializerRegistry) =
     this(
@@ -55,21 +49,12 @@ class CouchbasePersistenceSpec private (system: ActorSystem) extends ActorSystem
 
   def this(jsonSerializerRegistry: JsonSerializerRegistry) = this(ConfigFactory.empty(), jsonSerializerRegistry)
 
-  override def beforeAll(): Unit = {
-    CouchbaseCluster
-      .create()
-      .authenticate("admin", "admin1")
-      .openBucket("akka")
-      .query(N1qlQuery.simple("delete from akka"))
-
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
     awaitPersistenceInit(system)
 
     val cluster = Cluster(system)
     cluster.join(cluster.selfAddress)
   }
-
-  override def afterAll(): Unit =
-    super.afterAll()
 
 }

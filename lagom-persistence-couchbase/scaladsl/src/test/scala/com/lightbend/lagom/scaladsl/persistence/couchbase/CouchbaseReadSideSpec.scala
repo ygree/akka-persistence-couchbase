@@ -4,15 +4,9 @@
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
-import com.couchbase.client.java.query.N1qlQuery
-import com.couchbase.client.java.{Bucket, CouchbaseCluster}
+import akka.persistence.couchbase.CouchbaseBucketSetup
 import com.lightbend.lagom.internal.persistence.ReadSideConfig
-import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{
-  CouchbasePersistentEntityRegistry,
-  CouchbaseReadSideImpl,
-  ScaladslCouchbaseOffsetStore
-}
+import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{CouchbasePersistentEntityRegistry, CouchbaseReadSideImpl, ScaladslCouchbaseOffsetStore}
 import com.lightbend.lagom.scaladsl.persistence.TestEntity.Evt
 import com.lightbend.lagom.scaladsl.persistence._
 import com.typesafe.config.{Config, ConfigFactory}
@@ -27,39 +21,24 @@ object CouchbaseReadSideSpec {
 
 class CouchbaseReadSideSpec
     extends CouchbasePersistenceSpec(CouchbaseReadSideSpec.defaultConfig, TestEntitySerializerRegistry)
-    with AbstractReadSideSpec {
+    with AbstractReadSideSpec with CouchbaseBucketSetup {
   import system.dispatcher
 
   override protected lazy val persistentEntityRegistry = new CouchbasePersistentEntityRegistry(system)
 
-  private lazy val bucket: Bucket = {
-    CouchbaseCluster.create().authenticate("admin", "admin1").openBucket("akka")
-  }
-  private lazy val testSession: CouchbaseSession = CouchbaseSession(bucket)
-  private lazy val offsetStore = new ScaladslCouchbaseOffsetStore(system, testSession, ReadSideConfig())
-  private lazy val couchbaseReadSide = new CouchbaseReadSideImpl(system, testSession, offsetStore)
+  private lazy val offsetStore = new ScaladslCouchbaseOffsetStore(system, session, ReadSideConfig())
+  private lazy val couchbaseReadSide = new CouchbaseReadSideImpl(system, session, offsetStore)
 
   override def processorFactory(): ReadSideProcessor[Evt] =
-    new TestEntityReadSide.TestEntityReadSideProcessor(system, couchbaseReadSide, testSession)
+    new TestEntityReadSide.TestEntityReadSideProcessor(system, couchbaseReadSide, session)
 
-  private lazy val readSide = new TestEntityReadSide(system, testSession)
+  private lazy val readSide = new TestEntityReadSide(system, session)
 
   override def getAppendCount(id: String): Future[Long] = readSide.getAppendCount(id)
 
   override def afterAll(): Unit = {
     persistentEntityRegistry.gracefulShutdown(5.seconds)
     super.afterAll()
-  }
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    // FIXME, use a global connection / get it from the journal
-    CouchbaseCluster
-      .create()
-      .authenticate("admin", "admin1")
-      .openBucket("akka")
-      .query(N1qlQuery.simple("delete from akka"))
-
   }
 
 }
