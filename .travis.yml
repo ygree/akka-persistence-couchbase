@@ -19,6 +19,9 @@ script:
 
 jobs:
   include:
+    - stage: whitesource
+      script: sbt 'set credentials += Credentials("whitesource", "whitesourcesoftware.com", "", System.getenv("WHITESOURCE_KEY"))' whitesourceCheckPolicies whitesourceUpdate
+
     - stage: check
       script: sbt headerCheck || { echo "[error] Missing license headers found. Please run 'headerCreate' and commit the updated code."; false; }
       name: "Copyright header check"
@@ -45,10 +48,6 @@ jobs:
     - env:
         - PRE_CMD="docker-compose up -d couchbase"
         - CMD=lagom-persistence-couchbase-scaladsl/test
-
-    - stage: whitesource
-      env: CMD=";whitesourceCheckPolicies ;whitesourceUpdate"
-      jdk: oraclejdk8
 
 stages:
   # runs on master commits and PRs
