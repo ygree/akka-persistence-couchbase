@@ -9,8 +9,8 @@ import akka.dispatch.ExecutionContexts
 import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
-import akka.{ Done, NotUsed }
-import com.couchbase.client.java.{ AsyncBucket, Bucket, Cluster }
+import akka.{Done, NotUsed}
+import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster}
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
@@ -31,7 +31,7 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
 
   override def underlying: AsyncBucket = asyncBucket
 
-  def insert(document: JsonDocument): Future[JsonDocument] = {
+  def insert(document: JsonDocument): Future[JsonDocument] =
     singleObservableToFuture(asyncBucket.insert(document), document)
 
   def insert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument] =
@@ -54,11 +54,11 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
                                                 writeSettings.timeUnit),
                              document.id)
 
-  override def remove(id: String): Future[Done] =
+  def remove(id: String): Future[Done] =
     singleObservableToFuture(asyncBucket.remove(id), id)
       .map(_ => Done)(ExecutionContexts.sameThreadExecutionContext)
 
-  override def remove(id: String, writeSettings: CouchbaseWriteSettings): Future[Done] =
+  def remove(id: String, writeSettings: CouchbaseWriteSettings): Future[Done] =
     singleObservableToFuture(asyncBucket.remove(id,
                                                 writeSettings.persistTo,
                                                 writeSettings.replicateTo,
@@ -103,7 +103,7 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
           // FIXME blocking on global ec right now
           cluster match {
             case Some(cluster) => cluster.disconnect()
-            case None          =>
+            case None =>
           }
         }(ExecutionContexts.global())
         .map(_ => Done)(ExecutionContexts.sameThreadExecutionContext)

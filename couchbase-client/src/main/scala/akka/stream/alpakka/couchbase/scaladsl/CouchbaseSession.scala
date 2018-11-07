@@ -28,7 +28,7 @@ object CouchbaseSession {
     val cluster: Cluster =
       settings.environment match {
         case Some(environment) => CouchbaseCluster.create(environment, settings.nodes: _*)
-        case None              => CouchbaseCluster.create(settings.nodes: _*)
+        case None => CouchbaseCluster.create(settings.nodes: _*)
       }
     cluster.authenticate(settings.username, settings.password)
     val bucket = cluster.openBucket(bucketName)

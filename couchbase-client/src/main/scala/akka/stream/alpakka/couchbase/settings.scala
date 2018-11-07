@@ -4,7 +4,7 @@
 package akka.stream.alpakka.couchbase
 
 import com.couchbase.client.java.env.CouchbaseEnvironment
-import com.couchbase.client.java.{ PersistTo, ReplicateTo }
+import com.couchbase.client.java.{PersistTo, ReplicateTo}
 import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
@@ -15,24 +15,22 @@ object CouchbaseWriteSettings {
   val default = apply()
 
   // FIXME default params in public API is problematic for bincomp
-  def apply(
-    parallelism: Int                           = 1,
-    replicateTo: ReplicateTo                   = ReplicateTo.ONE,
-    persistTo:   PersistTo                     = PersistTo.NONE,
-    timeout:     Long                          = 2L,
-    timeUnit:    java.util.concurrent.TimeUnit = java.util.concurrent.TimeUnit.SECONDS): CouchbaseWriteSettings =
+  def apply(parallelism: Int = 1,
+            replicateTo: ReplicateTo = ReplicateTo.ONE,
+            persistTo: PersistTo = PersistTo.NONE,
+            timeout: Long = 2L,
+            timeUnit: java.util.concurrent.TimeUnit = java.util.concurrent.TimeUnit.SECONDS): CouchbaseWriteSettings =
     new CouchbaseWriteSettings(parallelism, replicateTo, persistTo, timeout, timeUnit)
 
   def create(): CouchbaseWriteSettings = CouchbaseWriteSettings()
 
 }
 
-final class CouchbaseWriteSettings private (
-  val parallelism: Int,
-  val replicateTo: ReplicateTo,
-  val persistTo:   PersistTo,
-  val timeout:     Long,
-  val timeUnit:    java.util.concurrent.TimeUnit) {
+final class CouchbaseWriteSettings private (val parallelism: Int,
+                                            val replicateTo: ReplicateTo,
+                                            val persistTo: PersistTo,
+                                            val timeout: Long,
+                                            val timeUnit: java.util.concurrent.TimeUnit) {
 
   def withParallelism(parallelism: Int): CouchbaseWriteSettings = copy(parallelism = parallelism)
 
@@ -43,21 +41,20 @@ final class CouchbaseWriteSettings private (
   def withTimeOut(timeout: Long, timeUnit: java.util.concurrent.TimeUnit): CouchbaseWriteSettings =
     copy(timeout = timeout, timeUnit = timeUnit)
 
-  private[this] def copy(
-    parallelism: Int                           = parallelism,
-    replicateTo: ReplicateTo                   = replicateTo,
-    persistTo:   PersistTo                     = persistTo,
-    timeout:     Long                          = timeout,
-    timeUnit:    java.util.concurrent.TimeUnit = timeUnit) =
+  private[this] def copy(parallelism: Int = parallelism,
+                         replicateTo: ReplicateTo = replicateTo,
+                         persistTo: PersistTo = persistTo,
+                         timeout: Long = timeout,
+                         timeUnit: java.util.concurrent.TimeUnit = timeUnit) =
     new CouchbaseWriteSettings(parallelism, replicateTo, persistTo, timeout, timeUnit)
 
   override def equals(other: Any): Boolean = other match {
     case that: CouchbaseWriteSettings =>
       parallelism == that.parallelism &&
-        replicateTo == that.replicateTo &&
-        persistTo == that.persistTo &&
-        timeout == that.timeout &&
-        timeUnit == that.timeUnit
+      replicateTo == that.replicateTo &&
+      persistTo == that.persistTo &&
+      timeout == that.timeout &&
+      timeUnit == that.timeUnit
     case _ => false
   }
 
@@ -79,21 +76,18 @@ object CouchbaseSessionSettings {
     new CouchbaseSessionSettings(username, password, nodes, None)
   }
 
-  def apply(username: String, password: String): CouchbaseSessionSettings = {
+  def apply(username: String, password: String): CouchbaseSessionSettings =
     new CouchbaseSessionSettings(username, password, Nil, None)
-  }
 
-  def create(username: String, password: String): CouchbaseSessionSettings = {
+  def create(username: String, password: String): CouchbaseSessionSettings =
     apply(username, password)
-  }
 
 }
 
-final class CouchbaseSessionSettings private (
-  val username:    String,
-  val password:    String,
-  val nodes:       immutable.Seq[String],
-  val environment: Option[CouchbaseEnvironment]) {
+final class CouchbaseSessionSettings private (val username: String,
+                                              val password: String,
+                                              val nodes: immutable.Seq[String],
+                                              val environment: Option[CouchbaseEnvironment]) {
 
   def withUsername(username: String): CouchbaseSessionSettings =
     copy(username = username)
@@ -113,19 +107,18 @@ final class CouchbaseSessionSettings private (
   def withEnvironment(environment: CouchbaseEnvironment): CouchbaseSessionSettings =
     copy(environment = Some(environment))
 
-  private def copy(
-    username:    String                       = username,
-    password:    String                       = password,
-    nodes:       immutable.Seq[String]        = nodes,
-    environment: Option[CouchbaseEnvironment] = environment): CouchbaseSessionSettings =
+  private def copy(username: String = username,
+                   password: String = password,
+                   nodes: immutable.Seq[String] = nodes,
+                   environment: Option[CouchbaseEnvironment] = environment): CouchbaseSessionSettings =
     new CouchbaseSessionSettings(username, password, nodes, environment)
 
   override def equals(other: Any): Boolean = other match {
     case that: CouchbaseSessionSettings =>
       username == that.username &&
-        password == that.password &&
-        nodes == that.nodes &&
-        environment == that.environment
+      password == that.password &&
+      nodes == that.nodes &&
+      environment == that.environment
     case _ => false
   }
 

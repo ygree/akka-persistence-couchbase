@@ -7,9 +7,7 @@ package akka.persistence.couchbase
 import akka.stream.alpakka.couchbase.CouchbaseSessionSettings
 import com.typesafe.config.Config
 
-final class CouchbaseJournalSettings private (
-  val sessionSettings: CouchbaseSessionSettings,
-  val bucket:          String)
+final class CouchbaseJournalSettings private (val sessionSettings: CouchbaseSessionSettings, val bucket: String)
 
 object CouchbaseJournalSettings {
 
@@ -22,9 +20,7 @@ object CouchbaseJournalSettings {
   }
 }
 
-final class CouchbaseReadJournalSettings private (
-  val sessionSettings: CouchbaseSessionSettings,
-  val bucket:          String)
+final class CouchbaseReadJournalSettings private (val sessionSettings: CouchbaseSessionSettings, val bucket: String)
 
 object CouchbaseReadJournalSettings {
 
@@ -38,9 +34,7 @@ object CouchbaseReadJournalSettings {
   }
 }
 
-final class CouchbaseSnapshotSettings private (
-  val sessionSettings: CouchbaseSessionSettings,
-  val bucket:          String)
+final class CouchbaseSnapshotSettings private (val sessionSettings: CouchbaseSessionSettings, val bucket: String)
 
 object CouchbaseSnapshotSettings {
 
@@ -53,4 +47,3 @@ object CouchbaseSnapshotSettings {
     new CouchbaseSnapshotSettings(sessionSettings, bucket)
   }
 }
-
