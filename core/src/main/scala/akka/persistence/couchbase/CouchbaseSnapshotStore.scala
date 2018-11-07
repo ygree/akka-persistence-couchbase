@@ -27,9 +27,15 @@ import scala.concurrent.{ExecutionContext, Future}
 
 // FIXME, share a Couchbase cluster between read/journal and snapshot
 // Make it an extension to look them up?
-class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
+class CouchbaseSnapshotStore(cfg: Config, configPath: String) extends SnapshotStore {
 
-  private val settings: CouchbaseSnapshotSettings = CouchbaseSnapshotSettings(cfg)
+  private val settings: CouchbaseSnapshotSettings = {
+    // shared config is one level above the journal specific
+    val commonPath = configPath.replaceAll("""\.snapshot""", "")
+    val sharedConfig = context.system.settings.config.getConfig(commonPath)
+
+    CouchbaseSnapshotSettings(sharedConfig)
+  }
   private implicit val ec: ExecutionContext = context.dispatcher
 
   val couchbase = CouchbaseSession(settings.sessionSettings, settings.bucket)

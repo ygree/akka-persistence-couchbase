@@ -12,8 +12,8 @@ final class CouchbaseJournalSettings private (val sessionSettings: CouchbaseSess
 object CouchbaseJournalSettings {
 
   def apply(config: Config): CouchbaseJournalSettings = {
-    val clientConfig = config.getConfig("couchbase-client")
-    val bucket = config.getString("bucket")
+    val clientConfig = config.getConfig("connection")
+    val bucket = config.getString("write.bucket")
     val sessionSettings = CouchbaseSessionSettings(clientConfig)
 
     new CouchbaseJournalSettings(sessionSettings, bucket)
@@ -26,8 +26,8 @@ object CouchbaseReadJournalSettings {
 
   def apply(config: Config): CouchbaseReadJournalSettings = {
     // FIXME uses the same config as CouchbaseJournalSettings for now
-    val clientConfig = config.getConfig("couchbase-client")
-    val bucket = config.getString("bucket")
+    val clientConfig = config.getConfig("connection")
+    val bucket = config.getString("write.bucket")
     val sessionSettings = CouchbaseSessionSettings(clientConfig)
 
     new CouchbaseReadJournalSettings(sessionSettings, bucket)
@@ -40,8 +40,8 @@ object CouchbaseSnapshotSettings {
 
   def apply(config: Config): CouchbaseSnapshotSettings = {
     // FIXME uses the same config as CouchbaseJournalSettings for now
-    val clientConfig = config.getConfig("couchbase-client")
-    val bucket = config.getString("bucket")
+    val clientConfig = config.getConfig("connection")
+    val bucket = config.getString("snapshot.bucket")
     val sessionSettings = CouchbaseSessionSettings(clientConfig)
 
     new CouchbaseSnapshotSettings(sessionSettings, bucket)

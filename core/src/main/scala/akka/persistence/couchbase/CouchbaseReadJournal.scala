@@ -24,7 +24,7 @@ import com.typesafe.config.Config
 import scala.collection.immutable
 
 object CouchbaseReadJournal {
-  final val Identifier = "akka.persistence.couchbase.query"
+  final val Identifier = "couchbase-journal.read"
 }
 
 /*
@@ -34,7 +34,7 @@ CREATE INDEX `pi2` ON `akka`((self.`persistenceId`),(self.`sequence_from`))
 
 
  */
-class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: String)
+class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPath: String)
     extends ReadJournal
     with EventsByPersistenceIdQuery
     with CurrentEventsByPersistenceIdQuery
@@ -43,13 +43,18 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     with CurrentPersistenceIdsQuery
     with PersistenceIdsQuery {
 
-  private val serialization: Serialization = SerializationExtension(as)
+  private val serialization: Serialization = SerializationExtension(system)
 
-  println(config.toString)
-  private val settings = CouchbaseReadJournalSettings(config)
+  private val settings: CouchbaseReadJournalSettings = {
+    // shared config is one level above the journal specific
+    val commonPath = configPath.replaceAll("""\.read$""", "")
+    val sharedConfig = system.settings.config.getConfig(commonPath)
+
+    CouchbaseReadJournalSettings(sharedConfig)
+  }
   private val session = CouchbaseSession(settings.sessionSettings, settings.bucket)
 
-  as.registerOnTermination {
+  system.registerOnTermination {
     session.close()
   }
 

@@ -94,7 +94,7 @@ Need at least this GI:
 - create index pi2  on akka(akka.persistenceId, akka.sequence_from)
 
  */
-class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal {
+class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJournal {
 
   private implicit val ec: ExecutionContext = context.dispatcher
 
@@ -102,8 +102,13 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
   private val serialization: Serialization = SerializationExtension(context.system)
   private implicit val materializer = ActorMaterializer()
 
-  // FIXME move connect logic to connector/client?
-  private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(c)
+  private val settings: CouchbaseJournalSettings = {
+    // shared config is one level above the journal specific
+    val commonPath = configPath.replaceAll("""\.write$""", "")
+    val sharedConfig = context.system.settings.config.getConfig(commonPath)
+
+    CouchbaseJournalSettings(sharedConfig)
+  }
 
   val couchbase = CouchbaseSession(settings.sessionSettings, settings.bucket)
 
