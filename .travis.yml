@@ -20,7 +20,7 @@ script:
 jobs:
   include:
     - stage: whitesource
-      script: sbt 'set credentials += Credentials("whitesource", "whitesourcesoftware.com", "", System.getenv("WHITESOURCE_KEY"))' whitesourceCheckPolicies whitesourceUpdate
+      script: sbt whitesourceCheckPolicies whitesourceUpdate
 
     - stage: check
       script: sbt headerCheck || { echo "[error] Missing license headers found. Please run 'headerCreate' and commit the updated code."; false; }
@@ -73,5 +73,5 @@ cache:
 
 env:
   global:
-    # encrypt with: travis encrypt WHITESOURCE_KEY=...
-    - secure: "dmWVfihnn9GFhFEf4PG7pESuthP7pHsjF8BLCQrtsTkAErkEHAMbxFMY89iv4Xyapp/9PUZAtEUi3f4CthTX5AdbbG4wfG59FLc6/aQNqZKQyKlHcVDlOsLjogTx3NDHnGmLjC6IQEtiO8lQzlhu1jaDK0yahnd8WWBLBxtf1j7LG8wbL41kbz8U+NEgLGRvIuxvPQAcWm/yPO4PLHfvYQxY6PJvgesF/B2e7z1ItvlQSJkcGPN3Y45cS/gJVJvCr3RAVuj4UDxQ7nO7jtjKJou09JkvYtHX7mDFumX1IaSWRHURPX0OoW895JUeORuZtXaPrcCWfJ8OSxa046NV8X5k4YoQYJ4KR7XWP5U2VbrcGl/Zb4/chHfJNxyK2rPqXzWfSN919rCJEdigDPAABzfjE4L6S7AsAPID2X33rOEhh0loQPYLK0+EltXO1mVw94c0E+JKeWoV1KQhMrJKIh1OXNUnV+a+VkClOktEJA2kT9TSWWvAMUJ3w65ejiR/1flFlnfKmiUPMj0qRGB4VGy9BISUMFGS9IZxC4atnEW11qRJwEkMnTuNcU4/I5P753m0t3cvDIfaqWf8KRDbPhKRRX9YKqrf1QLZWkU7653MjA26ikrONqJbOQMyxz/mi/exAkQiMxF6j0KgEp5tOMI+DppqEvCK8qNgbriaiXI="
+    # encrypt with: travis encrypt WHITESOURCE_PASSWORD=...
+    - secure: "HZY00jZS2NeNQm4zXLHnHTCwcWuXkDw/rXX1SSFvleDTQh1Hj/zAkC3CiEl2zmA8+bV6Cu+dBrOeK0gjYgmYNjiPdNkq4J8w34in6ebxZJfRz4FriVAniZHDXU86VupHPI4MvfKpfyeyQyr16jrMwm+vDP3Piuqzt//1M6056iTSHf0x0rqcmH8a+jiBAgk71/PUCoFdfjtE++niVF0iMKI6WMIA7BBpEW9bCjJ6xoqFZCpPv4blPLbxJGLAwWIycK8m1Me7caeTDrQC9q3vTBlrNEuZSChcSxc/K6D8xexMGl36wNpovNegpU9QobFlbcNNuTgfdsthil1zETTRNkjVjUxhbNalfuwyJMyTN5DT6e7b0n1hbZZ/LW/22X4iCK4DZ6sEmLSjuw/jdspXtSo0acgQVXDBJ0tWkBDnhpjbxR83Q7TUoIQww2tByrZs9kcYM/A9Csukl/Te8B4ICeWIxwEHePzI54JBURF1rBVnOjxM1C0Efp+tlA28y93ywKJPiUCAen2DLNop+WJuYWGSiiKRpOy/Bqdf3vkgmekObGNSJZeUYaW/nXZOF3a1RIc050L0VboJR+emDj+HP7KHK1h8zpezFmH9kIJ/Y4SX4Zq1sVtJGwrmzpsmorBEZQIRjON46469dQMu/P9VdUwGuT/E1LcBJyhO7/7ssPQ="
