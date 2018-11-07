@@ -37,20 +37,20 @@ done
 # Setup index and memory quota
 log "$(date +"%T") Init cluster ........."
 couchbase-cli cluster-init -c 127.0.0.1 --cluster-username $USERNAME --cluster-password $PASSWORD \
-  --cluster-name $CLUSTER_NAME --cluster-ramsize 512 --cluster-index-ramsize 512 --services data,index,query,fts \
+  --cluster-name $CLUSTER_NAME --cluster-ramsize 256 --cluster-index-ramsize 256 --services data,index,query,fts \
   --index-storage-setting default
 
 # Create the bucket
 log "$(date +"%T") Create buckets ........."
 couchbase-cli bucket-create -c 127.0.0.1 --username $USERNAME --password $PASSWORD --bucket-type couchbase \
-  --bucket-ramsize 256 --bucket $BUCKET --enable-flush 1
+  --bucket-ramsize 100 --bucket $BUCKET --enable-flush 1
 
 # Need to wait until query service is ready to process N1QL queries
 log "$(date +"%T") Waiting ........."
 sleep 20 #TODO: how to check if it's ready to process N1QL queries
 
-# Create bucket1 indexes
-#echo "$(date +"%T") Create bucket1 indexes ........."
+# Create indexes
+echo "$(date +"%T") Create bucket indices ........."
 cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`pi2\` ON \`akka\`((self.\`persistence_id\`),(self.\`sequence_from\`));"
 cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`tags\` ON \`akka\`((all (\`all_tags\`)),\`ordering\`);"
 
