@@ -13,7 +13,9 @@ import com.couchbase.client.java.bucket.BucketType
 import com.couchbase.client.java.cluster.DefaultBucketSettings
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
+import com.couchbase.client.java.query.{N1qlParams, N1qlQuery}
 import com.couchbase.client.java.query.Select.select
+import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.{Cluster, CouchbaseCluster}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpec}
@@ -101,15 +103,21 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
 
       bucket.bucketManager().createN1qlIndex("q", true, false, "daField")
 
-      Future.traverse(1 to 1000) { (n) =>
-        val obj = JsonObject.create()
-        obj.put("daField", n: Long)
-        session.insert(JsonDocument.create(s"q-$n", obj))
-      }.futureValue
+      Future
+        .traverse(1 to 1000) { (n) =>
+          val obj = JsonObject.create()
+          obj.put("daField", n: Long)
+          session.insert(JsonDocument.create(s"q-$n", obj))
+        }
+        .futureValue
 
-      val query = select("*")
+      val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+
+      val statement = select("*")
         .from(bucketName)
         .where(x("daField").isValued)
+
+      val query = N1qlQuery.simple(statement, queryParams)
 
       // FIXME verify backpressure somehow
       val queryResult = session.streamedQuery(query).runWith(Sink.seq).futureValue

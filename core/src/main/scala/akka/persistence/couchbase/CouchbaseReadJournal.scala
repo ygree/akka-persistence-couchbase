@@ -45,7 +45,8 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
 
   private val serialization: Serialization = SerializationExtension(as)
 
-  private val settings = CouchbaseReadJournalSettings(config.getConfig(configPath))
+  println(config.toString)
+  private val settings = CouchbaseReadJournalSettings(config)
   private val session = CouchbaseSession(settings.sessionSettings, settings.bucket)
 
   as.registerOnTermination {

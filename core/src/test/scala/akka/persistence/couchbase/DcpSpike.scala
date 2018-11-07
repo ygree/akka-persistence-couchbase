@@ -5,7 +5,7 @@
 package akka.persistence.couchbase
 
 import com.couchbase.client.dcp._
-import com.couchbase.client.dcp.message.{ DcpDeletionMessage, DcpMutationMessage }
+import com.couchbase.client.dcp.message.{DcpDeletionMessage, DcpMutationMessage}
 import com.couchbase.client.dcp.transport.netty.ChannelFlowController
 import com.couchbase.client.deps.io.netty.buffer.ByteBuf
 import com.couchbase.client.deps.io.netty.util.CharsetUtil
