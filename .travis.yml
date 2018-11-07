@@ -29,24 +29,23 @@ jobs:
       name: "Code style check"
     - script: sbt scalafmtSbtCheck || { echo "[error] Unformatted sbt code found. Please run 'scalafmtSbt' and commit the reformatted code."; false; }
       name: "Build code style check"
-    #TODO: enable cross builds by adding '+' in front of the command. Now not all the modules are compilable with Scala 2.11
-    - env: CMD="Test/compile"
+    - env: CMD="+Test/compile"
 
     - stage: test
     - env:
         - PRE_CMD="docker-compose up -d couchbase"
-        - CMD=couchbaseClient/test
+        - CMD=+couchbaseClient/test
     - env:
         - PRE_CMD="docker-compose up -d couchbase"
-        - CMD=core/test
+        - CMD=+core/test
     - env:
-        - CMD=lagom-persistence-couchbase-core/test
-    - env:
-        - PRE_CMD="docker-compose up -d couchbase"
-        - CMD=lagom-persistence-couchbase-javadsl/test
+        - CMD=+lagom-persistence-couchbase-core/test
     - env:
         - PRE_CMD="docker-compose up -d couchbase"
-        - CMD=lagom-persistence-couchbase-scaladsl/test
+        - CMD=+lagom-persistence-couchbase-javadsl/test
+    - env:
+        - PRE_CMD="docker-compose up -d couchbase"
+        - CMD=+lagom-persistence-couchbase-scaladsl/test
 
 stages:
   # runs on master commits and PRs

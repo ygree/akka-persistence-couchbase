@@ -10,7 +10,10 @@ import com.typesafe.config.ConfigFactory
 
 import scala.concurrent.duration._
 
-class CouchbaseJournalPerfSpec extends JournalPerfSpec(ConfigFactory.load()) with CouchbaseBucketSetup with SuppressedLogging {
+class CouchbaseJournalPerfSpec
+    extends JournalPerfSpec(ConfigFactory.load())
+    with CouchbaseBucketSetup
+    with SuppressedLogging {
 
   override def awaitDurationMillis: Long = 20.seconds.toMillis
 
