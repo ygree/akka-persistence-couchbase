@@ -17,7 +17,7 @@ object Whitesource extends AutoPlugin {
     // do not change the value of whitesourceProduct
     whitesourceProduct := "Lightbend Reactive Platform",
     whitesourceAggregateProjectName := {
-      (moduleName in LocalRootProject).value + "-" + (
+      (moduleName in LocalRootProject).value.replace("-root", "") + "-" + (
         if (isSnapshot.value)
           if (describe(baseDirectory.value) contains "master") "master"
           else "adhoc"
