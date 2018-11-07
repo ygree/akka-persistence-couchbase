@@ -10,21 +10,15 @@ import akka.actor.setup.ActorSystemSetup
 import akka.actor.{ActorSystem, BootstrapSetup}
 import akka.cluster.Cluster
 import akka.pattern.AskTimeoutException
+import akka.persistence.couchbase.CouchbaseBucketSetup
 import akka.stream.{ActorMaterializer, Materializer}
 import akka.testkit.TestKit
-import com.couchbase.client.java.CouchbaseCluster
-import com.couchbase.client.java.query.N1qlQuery
 import com.lightbend.lagom.internal.persistence.testkit.AwaitPersistenceInit.awaitPersistenceInit
 import com.lightbend.lagom.scaladsl.api.ServiceLocator
 import com.lightbend.lagom.scaladsl.api.ServiceLocator.NoServiceLocator
 import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.{InvalidCommandException, UnhandledCommandException}
 import com.lightbend.lagom.scaladsl.persistence.TestEntity.Mode
-import com.lightbend.lagom.scaladsl.persistence.{
-  PersistentEntity,
-  PersistentEntityRegistry,
-  TestEntity,
-  TestEntitySerializerRegistry
-}
+import com.lightbend.lagom.scaladsl.persistence.{PersistentEntity, PersistentEntityRegistry, TestEntity, TestEntitySerializerRegistry}
 import com.lightbend.lagom.scaladsl.playjson.JsonSerializerRegistry
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalactic.TypeCheckedTripleEquals
@@ -32,7 +26,6 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import play.api.{Environment, Mode => PlayMode}
-import com.lightbend.lagom.internal.persistence.testkit.PersistenceTestConfig._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -42,7 +35,8 @@ class PersistentEntityRefSpec
     with Matchers
     with BeforeAndAfterAll
     with ScalaFutures
-    with TypeCheckedTripleEquals {
+    with TypeCheckedTripleEquals
+    with CouchbaseBucketSetup {
 
   override implicit val patienceConfig = PatienceConfig(5.seconds, 150.millis)
 
@@ -61,12 +55,6 @@ class PersistentEntityRefSpec
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    // FIXME, stop creating a new one of these
-    CouchbaseCluster
-      .create()
-      .authenticate("admin", "admin1")
-      .openBucket("akka")
-      .query(N1qlQuery.simple("delete from akka"))
 
     Cluster.get(system).join(Cluster.get(system).selfAddress)
     awaitPersistenceInit(system)

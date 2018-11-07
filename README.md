@@ -10,6 +10,7 @@ docker-compose build && docker-compose up
 
 Stopping the Couchbase docker container by:
 ```
+docker-compose down
 ```
 
 Couchbase dashboard is available at `http://localhost:8091` with username `admin` password `admin1`.

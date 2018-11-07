@@ -119,7 +119,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     couchbase.close()
 
   override def asyncWriteMessages(messages: im.Seq[AtomicWrite]): Future[im.Seq[Try[Unit]]] = {
-    log.info("asyncWriteMessages {}", messages)
+    log.debug("asyncWriteMessages {}", messages)
     require(messages.nonEmpty)
     val pid = messages.head.persistenceId
     val inserts: im.Seq[(String, JsonObject)] = messages.map(aw => {

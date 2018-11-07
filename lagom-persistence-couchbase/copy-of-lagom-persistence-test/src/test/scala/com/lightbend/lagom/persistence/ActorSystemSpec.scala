@@ -38,7 +38,7 @@ abstract class ActorSystemSpec(system: ActorSystem) extends TestKit(system)
 
   def this() = this(ConfigFactory.empty())
 
-  override def afterAll(): Unit = {
+  override protected def afterAll(): Unit = {
     shutdown()
     super.afterAll()
   }
