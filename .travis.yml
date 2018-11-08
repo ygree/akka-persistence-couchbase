@@ -34,18 +34,18 @@ jobs:
     - stage: test
     - env:
         - PRE_CMD="docker-compose up -d couchbase"
-        - CMD=+couchbaseClient/test
+        - CMD=couchbaseClient/test
     - env:
         - PRE_CMD="docker-compose up -d couchbase"
-        - CMD=+core/test
+        - CMD=core/test
     - env:
-        - CMD=+lagom-persistence-couchbase-core/test
-    - env:
-        - PRE_CMD="docker-compose up -d couchbase"
-        - CMD=+lagom-persistence-couchbase-javadsl/test
+        - CMD=lagom-persistence-couchbase-core/test
     - env:
         - PRE_CMD="docker-compose up -d couchbase"
-        - CMD=+lagom-persistence-couchbase-scaladsl/test
+        - CMD=lagom-persistence-couchbase-javadsl/test
+    - env:
+        - PRE_CMD="docker-compose up -d couchbase"
+        - CMD=lagom-persistence-couchbase-scaladsl/test
 
 stages:
   # runs on master commits and PRs
