@@ -54,7 +54,4 @@ echo "$(date +"%T") Create bucket indices ........."
 cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`pi2\` ON \`akka\`((self.\`persistence_id\`),(self.\`sequence_from\`));"
 cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`tags\` ON \`akka\`((all (\`all_tags\`)),\`ordering\`);"
 
-#TODO: temporary index for some tests that use 'delete from akka' to clean up
-cbq -u $USERNAME -p $PASSWORD -s "create primary index \`pi\` on \`akka\`;"
-
 fg 1

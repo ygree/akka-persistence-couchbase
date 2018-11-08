@@ -27,8 +27,12 @@ trait CouchbaseBucketSetup extends BeforeAndAfterAll { self: Suite =>
 
     val bucket = cluster.openBucket(bucketName)
 
+    bucket.bucketManager().createN1qlPrimaryIndex(true, false)
+
     val result = bucket.query(N1qlQuery.simple("delete from akka"), 5, TimeUnit.MINUTES)
     assert(result.finalSuccess())
+
+    bucket.bucketManager().dropN1qlPrimaryIndex(true)
 
     session = CouchbaseSession(bucket)
 
