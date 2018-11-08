@@ -4,6 +4,8 @@
 
 package akka.stream.alpakka.couchbase.impl
 
+import java.util.concurrent.TimeUnit
+
 import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
 import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
@@ -36,7 +38,7 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
 
   def insert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument] =
     singleObservableToFuture(
-      asyncBucket.insert(document, writeSettings.persistTo, writeSettings.timeout, writeSettings.timeUnit),
+      asyncBucket.insert(document, writeSettings.persistTo, writeSettings.timeout.toMillis, TimeUnit.MILLISECONDS),
       document
     )
 
@@ -50,8 +52,8 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
     singleObservableToFuture(asyncBucket.upsert(document,
                                                 writeSettings.persistTo,
                                                 writeSettings.replicateTo,
-                                                writeSettings.timeout,
-                                                writeSettings.timeUnit),
+                                                writeSettings.timeout.toMillis,
+                                                TimeUnit.MILLISECONDS),
                              document.id)
 
   def remove(id: String): Future[Done] =
@@ -62,8 +64,8 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
     singleObservableToFuture(asyncBucket.remove(id,
                                                 writeSettings.persistTo,
                                                 writeSettings.replicateTo,
-                                                writeSettings.timeout,
-                                                writeSettings.timeUnit),
+                                                writeSettings.timeout.toMillis,
+                                                TimeUnit.MILLISECONDS),
                              id)
       .map(_ => Done)(ExecutionContexts.sameThreadExecutionContext)
 
@@ -91,8 +93,8 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
                                                  initial,
                                                  writeSettings.persistTo,
                                                  writeSettings.replicateTo,
-                                                 writeSettings.timeout,
-                                                 writeSettings.timeUnit),
+                                                 writeSettings.timeout.toMillis,
+                                                 TimeUnit.MILLISECONDS),
                              id)
       .map(_.content(): Long)(ExecutionContexts.sameThreadExecutionContext)
 

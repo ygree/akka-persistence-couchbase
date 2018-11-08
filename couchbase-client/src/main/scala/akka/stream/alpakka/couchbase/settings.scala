@@ -3,34 +3,39 @@
  */
 package akka.stream.alpakka.couchbase
 
+import java.util.concurrent.TimeUnit
+
 import com.couchbase.client.java.env.CouchbaseEnvironment
 import com.couchbase.client.java.{PersistTo, ReplicateTo}
 import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
+import scala.concurrent.duration.FiniteDuration
 
 object CouchbaseWriteSettings {
 
-  val default = apply()
+  def apply(parallelism: Int,
+            replicateTo: ReplicateTo,
+            persistTo: PersistTo,
+            timeout: FiniteDuration): CouchbaseWriteSettings =
+    new CouchbaseWriteSettings(parallelism, replicateTo, persistTo, timeout)
 
-  // FIXME default params in public API is problematic for bincomp
-  def apply(parallelism: Int = 1,
-            replicateTo: ReplicateTo = ReplicateTo.ONE,
-            persistTo: PersistTo = PersistTo.NONE,
-            timeout: Long = 2L,
-            timeUnit: java.util.concurrent.TimeUnit = java.util.concurrent.TimeUnit.SECONDS): CouchbaseWriteSettings =
-    new CouchbaseWriteSettings(parallelism, replicateTo, persistTo, timeout, timeUnit)
-
-  def create(): CouchbaseWriteSettings = CouchbaseWriteSettings()
+  def create(parallelism: Int,
+             replicateTo: ReplicateTo,
+             persistTo: PersistTo,
+             timeout: java.time.Duration): CouchbaseWriteSettings =
+    new CouchbaseWriteSettings(parallelism,
+                               replicateTo,
+                               persistTo,
+                               FiniteDuration(timeout.toMillis, TimeUnit.MILLISECONDS))
 
 }
 
 final class CouchbaseWriteSettings private (val parallelism: Int,
                                             val replicateTo: ReplicateTo,
                                             val persistTo: PersistTo,
-                                            val timeout: Long,
-                                            val timeUnit: java.util.concurrent.TimeUnit) {
+                                            val timeout: FiniteDuration) {
 
   def withParallelism(parallelism: Int): CouchbaseWriteSettings = copy(parallelism = parallelism)
 
@@ -38,36 +43,45 @@ final class CouchbaseWriteSettings private (val parallelism: Int,
 
   def withPersistTo(persistTo: PersistTo): CouchbaseWriteSettings = copy(persistTo = persistTo)
 
-  def withTimeOut(timeout: Long, timeUnit: java.util.concurrent.TimeUnit): CouchbaseWriteSettings =
-    copy(timeout = timeout, timeUnit = timeUnit)
+  /**
+   * Java API:
+   */
+  def withTimeOut(timeout: java.time.Duration): CouchbaseWriteSettings =
+    copy(timeout = FiniteDuration(timeout.toMillis, TimeUnit.MILLISECONDS))
+
+  /**
+   * Scala API:
+   */
+  def withTimeout(timeout: FiniteDuration): CouchbaseWriteSettings = copy(timeout = timeout)
 
   private[this] def copy(parallelism: Int = parallelism,
                          replicateTo: ReplicateTo = replicateTo,
                          persistTo: PersistTo = persistTo,
-                         timeout: Long = timeout,
-                         timeUnit: java.util.concurrent.TimeUnit = timeUnit) =
-    new CouchbaseWriteSettings(parallelism, replicateTo, persistTo, timeout, timeUnit)
+                         timeout: FiniteDuration = timeout) =
+    new CouchbaseWriteSettings(parallelism, replicateTo, persistTo, timeout)
 
   override def equals(other: Any): Boolean = other match {
     case that: CouchbaseWriteSettings =>
       parallelism == that.parallelism &&
       replicateTo == that.replicateTo &&
       persistTo == that.persistTo &&
-      timeout == that.timeout &&
-      timeUnit == that.timeUnit
+      timeout == that.timeout
     case _ => false
   }
 
   override def hashCode(): Int = {
     31 * parallelism.hashCode() + 31 * replicateTo.hashCode() + 31 * persistTo.hashCode()
-    +31 * timeout.hashCode() + 31 * timeUnit.hashCode()
+    +31 * timeout.hashCode()
   }
 
-  override def toString: String = s"CouchbaseWriteSettings($parallelism, $replicateTo, $persistTo, $timeout, $timeUnit)"
+  override def toString: String = s"CouchbaseWriteSettings($parallelism, $replicateTo, $persistTo, $timeout)"
 }
 
 object CouchbaseSessionSettings {
 
+  /**
+   * Scala API:
+   */
   def apply(config: Config): CouchbaseSessionSettings = {
     // FIXME environment from config
     val username = config.getString("username")
@@ -76,11 +90,22 @@ object CouchbaseSessionSettings {
     new CouchbaseSessionSettings(username, password, nodes, None)
   }
 
+  /**
+   * Scala API:
+   */
   def apply(username: String, password: String): CouchbaseSessionSettings =
     new CouchbaseSessionSettings(username, password, Nil, None)
 
+  /**
+   * Java API:
+   */
   def create(username: String, password: String): CouchbaseSessionSettings =
     apply(username, password)
+
+  /**
+   * Java API:
+   */
+  def create(config: Config): CouchbaseSessionSettings = apply(config)
 
 }
 
@@ -127,5 +152,5 @@ final class CouchbaseSessionSettings private (val username: String,
     state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
   }
 
-  override def toString = s"CouchbaseSessionSettings($username, *****, $nodes, $environment)"
+  override def toString = s"CouchbaseSessionSettings($username, *****, ${nodes.mkString("[", ", ", "]")}, $environment)"
 }
