@@ -4,13 +4,15 @@
 
 package akka.stream.alpakka.couchbase.impl
 
+import java.util.concurrent.TimeUnit
+
 import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
 import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
-import com.couchbase.client.java.Bucket
+import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster}
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
@@ -19,20 +21,24 @@ import rx.RxReactiveStreams
 import scala.concurrent.Future
 
 /**
+ *
+ * @param cluster if provided, it will be shut down when `close()` is called
+ *
  * InternalAPI
  */
 @InternalApi
-final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket) extends CouchbaseSession {
-
+final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Option[Cluster]) extends CouchbaseSession {
   private val asyncBucket = bucket.async()
   import RxUtilities._
+
+  override def underlying: AsyncBucket = asyncBucket
 
   def insert(document: JsonDocument): Future[JsonDocument] =
     singleObservableToFuture(asyncBucket.insert(document), document)
 
   def insert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument] =
     singleObservableToFuture(
-      asyncBucket.insert(document, writeSettings.persistTo, writeSettings.timeout, writeSettings.timeUnit),
+      asyncBucket.insert(document, writeSettings.persistTo, writeSettings.timeout.toMillis, TimeUnit.MILLISECONDS),
       document
     )
 
@@ -46,20 +52,20 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket) extends Couc
     singleObservableToFuture(asyncBucket.upsert(document,
                                                 writeSettings.persistTo,
                                                 writeSettings.replicateTo,
-                                                writeSettings.timeout,
-                                                writeSettings.timeUnit),
+                                                writeSettings.timeout.toMillis,
+                                                TimeUnit.MILLISECONDS),
                              document.id)
 
-  override def remove(id: String): Future[Done] =
+  def remove(id: String): Future[Done] =
     singleObservableToFuture(asyncBucket.remove(id), id)
       .map(_ => Done)(ExecutionContexts.sameThreadExecutionContext)
 
-  override def remove(id: String, writeSettings: CouchbaseWriteSettings): Future[Done] =
+  def remove(id: String, writeSettings: CouchbaseWriteSettings): Future[Done] =
     singleObservableToFuture(asyncBucket.remove(id,
                                                 writeSettings.persistTo,
                                                 writeSettings.replicateTo,
-                                                writeSettings.timeout,
-                                                writeSettings.timeUnit),
+                                                writeSettings.timeout.toMillis,
+                                                TimeUnit.MILLISECONDS),
                              id)
       .map(_ => Done)(ExecutionContexts.sameThreadExecutionContext)
 
@@ -87,14 +93,21 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket) extends Couc
                                                  initial,
                                                  writeSettings.persistTo,
                                                  writeSettings.replicateTo,
-                                                 writeSettings.timeout,
-                                                 writeSettings.timeUnit),
+                                                 writeSettings.timeout.toMillis,
+                                                 TimeUnit.MILLISECONDS),
                              id)
       .map(_.content(): Long)(ExecutionContexts.sameThreadExecutionContext)
 
   def close(): Future[Done] =
     if (!asyncBucket.isClosed) {
       singleObservableToFuture(asyncBucket.close(), "close")
+        .map { _ =>
+          // FIXME blocking on global ec right now
+          cluster match {
+            case Some(cluster) => cluster.disconnect()
+            case None =>
+          }
+        }(ExecutionContexts.global())
         .map(_ => Done)(ExecutionContexts.sameThreadExecutionContext)
     } else {
       Future.successful(Done)

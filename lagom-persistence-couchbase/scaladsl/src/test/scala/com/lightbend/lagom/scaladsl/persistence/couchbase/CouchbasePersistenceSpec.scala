@@ -16,14 +16,21 @@ import com.typesafe.config.{Config, ConfigFactory}
 
 object CouchbasePersistenceSpec {
 
-  val couchbaseConfigMap: Map[String, AnyRef] = Map(
-    "akka.persistence.journal.plugin" -> "akka.persistence.couchbase.journal",
-    "akka.persistence.snapshot-store.plugin" -> "akka.persistence.couchbase.snapshot"
-  )
-
-  import scala.collection.JavaConverters._
-
-  def couchbaseConfig(): Config = ConfigFactory.parseMap(couchbaseConfigMap.asJava)
+  def couchbaseConfig(): Config =
+    ConfigFactory.parseString("""
+      |akka.persistence.journal.plugin = "couchbase-journal.write"
+      |akka.persistence.snapshot-store.plugin = "couchbase-journal.snapshot"
+      |
+      |couchbase-journal {
+      |  connection {
+      |    # nodes = [] # default
+      |    username = "admin"
+      |    password = "admin1"
+      |  }
+      |  write.bucket = "akka"
+      |  snapshot.bucket = "akka"
+      |}
+    """.stripMargin)
 
 }
 

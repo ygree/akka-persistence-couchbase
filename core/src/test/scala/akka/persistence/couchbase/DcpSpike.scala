@@ -4,13 +4,10 @@
 
 package akka.persistence.couchbase
 
-import java.util.concurrent.TimeUnit
-
-import com.couchbase.client.dcp.transport.netty.ChannelFlowController
 import com.couchbase.client.dcp._
+import com.couchbase.client.dcp.message.{DcpDeletionMessage, DcpMutationMessage}
+import com.couchbase.client.dcp.transport.netty.ChannelFlowController
 import com.couchbase.client.deps.io.netty.buffer.ByteBuf
-import com.couchbase.client.dcp.message.DcpDeletionMessage
-import com.couchbase.client.dcp.message.DcpMutationMessage
 import com.couchbase.client.deps.io.netty.util.CharsetUtil
 
 import scala.io.StdIn

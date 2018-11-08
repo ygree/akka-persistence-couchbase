@@ -21,7 +21,6 @@ import com.couchbase.client.java.query._
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.Sort._
-import com.couchbase.client.java.{Cluster, CouchbaseCluster}
 import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
@@ -95,25 +94,23 @@ Need at least this GI:
 - create index pi2  on akka(akka.persistenceId, akka.sequence_from)
 
  */
-class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal {
+class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJournal {
 
   private implicit val ec: ExecutionContext = context.dispatcher
 
   private val log = Logging(this)
   private val serialization: Serialization = SerializationExtension(context.system)
+  private implicit val materializer = ActorMaterializer()
 
-  private implicit val materializer = ActorMaterializer() // FIXME keeping our own rather than reusing another one?
+  private val settings: CouchbaseJournalSettings = {
+    // shared config is one level above the journal specific
+    val commonPath = configPath.replaceAll("""\.write$""", "")
+    val sharedConfig = context.system.settings.config.getConfig(commonPath)
 
-  // FIXME move connect logic to connector/client?
-  private val config: CouchbaseSettings = CouchbaseSettings(c)
-  private val cluster: Cluster = {
-    val c = CouchbaseCluster.create()
-    log.info("Auth {} {}", config.username, config.password)
-    c.authenticate(config.username, config.password)
-    c
+    CouchbaseJournalSettings(sharedConfig)
   }
 
-  val couchbase = CouchbaseSession(cluster.openBucket(config.bucket))
+  val couchbase = CouchbaseSession(settings.sessionSettings, settings.bucket)
 
   override def postStop(): Unit =
     couchbase.close()
@@ -156,7 +153,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         case (persistenceId, json) =>
           val p = Promise[Try[Unit]]()
           // TODO make persistTo configurable
-          couchbase.counter(config.bucket, 1, 0).flatMap { id =>
+          couchbase.counter(settings.bucket, 1, 0).flatMap { id =>
             val withId = json.put(Fields.Ordering, id)
             couchbase.insert(JsonDocument.create(persistenceId, withId))
           }
@@ -199,7 +196,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
 
       // FIXME, needs an orderby make sure index works with it
       val replayQuery = select("*")
-        .from(config.bucket)
+        .from(settings.bucket)
         .where(
           x(Fields.PersistenceId)
             .eq(x("$1"))
@@ -223,7 +220,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
         .runForeach(
           json =>
             CouchbaseJournal
-              .deserialize(json.getObject(config.bucket), toSequenceNr, serialization, CouchbaseJournal.extractEvent)
+              .deserialize(json.getObject(settings.bucket), toSequenceNr, serialization, CouchbaseJournal.extractEvent)
               .foreach { pr =>
                 recoveryCallback(pr)
             }
@@ -247,7 +244,7 @@ class CouchbaseJournal(c: Config, configPath: String) extends AsyncWriteJournal 
     log.info("asyncReadHighestSequenceNr {} {}", persistenceId, fromSequenceNr)
 
     val highestSequenceNrStatement = select(Fields.SequenceTo)
-      .from(config.bucket)
+      .from(settings.bucket)
       .where(
         x(Fields.PersistenceId)
           .eq(x("$1"))

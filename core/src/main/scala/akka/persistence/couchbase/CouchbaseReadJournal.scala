@@ -24,7 +24,7 @@ import com.typesafe.config.Config
 import scala.collection.immutable
 
 object CouchbaseReadJournal {
-  final val Identifier = "akka.persistence.couchbase.query"
+  final val Identifier = "couchbase-journal.read"
 }
 
 /*
@@ -34,7 +34,7 @@ CREATE INDEX `pi2` ON `akka`((self.`persistenceId`),(self.`sequence_from`))
 
 
  */
-class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: String)
+class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPath: String)
     extends ReadJournal
     with EventsByPersistenceIdQuery
     with CurrentEventsByPersistenceIdQuery
@@ -43,17 +43,19 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
     with CurrentPersistenceIdsQuery
     with PersistenceIdsQuery {
 
-  private val serialization: Serialization = SerializationExtension(as)
-  // TODO config
-  private val settings = CouchbaseSettings(config)
-  // FIXME, hosts from config
-  private val cluster = CouchbaseCluster.create().authenticate(settings.username, settings.password)
-  private val bucket = cluster.openBucket(settings.bucket)
-  private val asyncBucket = bucket.async()
-  private val session = CouchbaseSession(bucket)
+  private val serialization: Serialization = SerializationExtension(system)
 
-  as.registerOnTermination {
-    cluster.disconnect()
+  private val settings: CouchbaseReadJournalSettings = {
+    // shared config is one level above the journal specific
+    val commonPath = configPath.replaceAll("""\.read$""", "")
+    val sharedConfig = system.settings.config.getConfig(commonPath)
+
+    CouchbaseReadJournalSettings(sharedConfig)
+  }
+  private val session = CouchbaseSession(settings.sessionSettings, settings.bucket)
+
+  system.registerOnTermination {
+    session.close()
   }
 
   val pageSize: Int = 100 // FIXME from config
@@ -109,7 +111,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
           pageSize,
           N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
           params,
-          asyncBucket,
+          session.underlying,
           EventsByPersistenceIdState(fromSequenceNr, 0),
           state => {
             if (state.to >= toSequenceNr)
@@ -160,7 +162,7 @@ class CouchbaseReadJournal(as: ExtendedActorSystem, config: Config, configPath: 
             pageSize,
             N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, initialOrdering), queryParams),
             params,
-            asyncBucket,
+            session.underlying,
             initialOrdering,
             ordering =>
               Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),
