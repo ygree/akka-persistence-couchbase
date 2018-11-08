@@ -91,8 +91,6 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
       .put(Fields.SequenceNr, metadata.sequenceNr)
       .put(Fields.PersistenceId, metadata.persistenceId)
 
-    val key = snapshotKey(metadata)
-
     couchbase
       .upsert(JsonDocument.create(snapshotKey(metadata), toStore))
       .map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
@@ -139,6 +137,6 @@ class CouchbaseSnapshotStore(cfg: Config) extends SnapshotStore {
   }
 
   private def snapshotKey(metadata: SnapshotMetadata): String =
-    s"${metadata.persistenceId}-${metadata.sequenceNr}"
+    s"${metadata.persistenceId}-${metadata.sequenceNr}-snapshot"
 
 }
