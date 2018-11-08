@@ -22,6 +22,18 @@ def common: Seq[Setting[_]] = Seq(
     "-Ywarn-dead-code",
     "-Xfuture"
   ),
+  // Setting javac options in common allows IntelliJ IDEA to import them automatically
+  javacOptions in compile ++= Seq(
+    "-encoding",
+    "UTF-8",
+    "-source",
+    "1.8",
+    "-target",
+    "1.8",
+    "-parameters", // This param is required for Jackson serialization to preserve method parameter names
+    "-Xlint:unchecked",
+    "-Xlint:deprecation"
+  ),
   headerLicense := Some(
     HeaderLicense.Custom(
       """Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>"""
@@ -86,13 +98,11 @@ lazy val lagomModules = Seq[Project](
  */
 lazy val `copy-of-lagom-persistence-test` =
   (project in file("lagom-persistence-couchbase/copy-of-lagom-persistence-test"))
+    .settings(common)
     .settings(
-      //These block of settings is required for `sbt-travisci`,
-      //otherwise the build will fail with the "module not found: copy-of-lagom-persistence-test" error.
-      crossScalaVersions := Seq("2.11.12", "2.12.7"),
-      scalaVersion := crossScalaVersions.value.last
-    )
-    .settings(
+      // This modules copy-pasted preserve it as is
+      scalafmtOnCompile := false,
+      publishArtifact := false,
       libraryDependencies := Dependencies.`copy-of-lagom-persistence-test`
     )
 
