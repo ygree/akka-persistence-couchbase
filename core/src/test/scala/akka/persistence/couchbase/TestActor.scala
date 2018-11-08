@@ -9,6 +9,7 @@ import akka.actor.Props
 import akka.persistence.PersistentActor
 import akka.actor.ActorRef
 import akka.persistence.DeleteMessagesSuccess
+import akka.persistence.couchbase.TestActor.{GetLastRecoveredEvent, SaveSnapshot}
 import akka.persistence.journal.Tagged
 
 object TestActor {
@@ -17,14 +18,18 @@ object TestActor {
 
   final case class PersistAll(events: immutable.Seq[String])
   final case class DeleteTo(seqNr: Long)
+  final case object SaveSnapshot
+  final case object GetLastRecoveredEvent
 }
 
 class TestActor(override val persistenceId: String, override val journalPluginId: String) extends PersistentActor {
 
   var lastDelete: ActorRef = _
+  var lastRecoveredEvent: String = _
 
   val receiveRecover: Receive = {
     case evt: String =>
+      lastRecoveredEvent = evt
   }
 
   val receiveCommand: Receive = {
@@ -57,5 +62,12 @@ class TestActor(override val persistenceId: String, override val journalPluginId
 
     case d: DeleteMessagesSuccess =>
       lastDelete ! d
+
+    case SaveSnapshot =>
+      saveSnapshot("dumb-snapshot-body")
+      sender() ! snapshotSequenceNr
+
+    case GetLastRecoveredEvent =>
+      sender() ! lastRecoveredEvent
   }
 }
