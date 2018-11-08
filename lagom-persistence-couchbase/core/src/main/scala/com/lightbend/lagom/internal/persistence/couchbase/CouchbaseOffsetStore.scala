@@ -61,15 +61,23 @@ private[lagom] final class CouchbaseOffsetDao(session: CouchbaseSession,
   def bindSaveOffset(offset: Offset): CouchbaseAction =
     offset match {
       case NoOffset =>
-        (ab: CouchbaseSession, ec: ExecutionContext) =>
-          Future.successful(Done)
+        new CouchbaseAction {
+          override def execute(
+              ab: CouchbaseSession,
+              ec: ExecutionContext
+          ): Future[Done] = Future.successful(Done)
+        }
       case seq: Sequence =>
-        (ab: CouchbaseSession, ec: ExecutionContext) =>
-          {
+        new CouchbaseAction {
+          override def execute(
+              ab: CouchbaseSession,
+              ec: ExecutionContext
+          ): Future[Done] = {
             val id = CouchbaseOffset.offsetKey(eventProcessorId, tag)
             ab.upsert(JsonDocument.create(id, JsonObject.create().put("sequenceOffset", seq.value)))
               .map(_ => Done)(ec)
           }
+        }
       case uuid: TimeBasedUUID => ??? // not allowed for couchbase or is it?
     }
 

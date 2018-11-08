@@ -18,7 +18,12 @@ import com.lightbend.lagom.scaladsl.api.ServiceLocator
 import com.lightbend.lagom.scaladsl.api.ServiceLocator.NoServiceLocator
 import com.lightbend.lagom.scaladsl.persistence.PersistentEntity.{InvalidCommandException, UnhandledCommandException}
 import com.lightbend.lagom.scaladsl.persistence.TestEntity.Mode
-import com.lightbend.lagom.scaladsl.persistence.{PersistentEntity, PersistentEntityRegistry, TestEntity, TestEntitySerializerRegistry}
+import com.lightbend.lagom.scaladsl.persistence.{
+  PersistentEntity,
+  PersistentEntityRegistry,
+  TestEntity,
+  TestEntitySerializerRegistry
+}
 import com.lightbend.lagom.scaladsl.playjson.JsonSerializerRegistry
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalactic.TypeCheckedTripleEquals

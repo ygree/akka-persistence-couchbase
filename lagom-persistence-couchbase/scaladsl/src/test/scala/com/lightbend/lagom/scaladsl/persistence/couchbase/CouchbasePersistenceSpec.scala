@@ -18,7 +18,7 @@ object CouchbasePersistenceSpec {
 
   val couchbaseConfigMap: Map[String, AnyRef] = Map(
     "akka.persistence.journal.plugin" -> "akka.persistence.couchbase.journal",
-    "akka.persistence.snapshot-store.plugin" -> "akka.persistence.couchbase.snapshot",
+    "akka.persistence.snapshot-store.plugin" -> "akka.persistence.couchbase.snapshot"
   )
 
   import scala.collection.JavaConverters._

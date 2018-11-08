@@ -29,8 +29,7 @@ jobs:
       name: "Code style check"
     - script: sbt scalafmtSbtCheck || { echo "[error] Unformatted sbt code found. Please run 'scalafmtSbt' and commit the reformatted code."; false; }
       name: "Build code style check"
-    #TODO: enable cross builds by adding '+' in front of the command. Now not all the modules are compilable with Scala 2.11
-    - env: CMD="Test/compile"
+    - env: CMD="+Test/compile"
 
     - stage: test
     - env:

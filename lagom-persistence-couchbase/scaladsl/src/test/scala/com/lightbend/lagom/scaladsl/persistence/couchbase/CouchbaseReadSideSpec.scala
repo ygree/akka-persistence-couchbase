@@ -6,7 +6,11 @@ package com.lightbend.lagom.scaladsl.persistence.couchbase
 
 import akka.persistence.couchbase.CouchbaseBucketSetup
 import com.lightbend.lagom.internal.persistence.ReadSideConfig
-import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{CouchbasePersistentEntityRegistry, CouchbaseReadSideImpl, ScaladslCouchbaseOffsetStore}
+import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{
+  CouchbasePersistentEntityRegistry,
+  CouchbaseReadSideImpl,
+  ScaladslCouchbaseOffsetStore
+}
 import com.lightbend.lagom.scaladsl.persistence.TestEntity.Evt
 import com.lightbend.lagom.scaladsl.persistence._
 import com.typesafe.config.{Config, ConfigFactory}
@@ -21,7 +25,8 @@ object CouchbaseReadSideSpec {
 
 class CouchbaseReadSideSpec
     extends CouchbasePersistenceSpec(CouchbaseReadSideSpec.defaultConfig, TestEntitySerializerRegistry)
-    with AbstractReadSideSpec with CouchbaseBucketSetup {
+    with AbstractReadSideSpec
+    with CouchbaseBucketSetup {
   import system.dispatcher
 
   override protected lazy val persistentEntityRegistry = new CouchbasePersistentEntityRegistry(system)
