@@ -48,7 +48,7 @@ class CouchbasePersistenceModule extends Module {
 
 private[lagom] class CouchbaseSessionProvider @Inject()(cfg: Config) extends Provider[CouchbaseSession] {
 
-  private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(cfg)
+  private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(cfg.getConfig("couchbase-journal"))
   //  private implicit val ec: ExecutionContext = context.dispatcher
 
   val session = CouchbaseSession(settings.sessionSettings, settings.bucket)
