@@ -91,7 +91,7 @@ class RequestTimeoutTestSpec extends WordSpec with Matchers with ScalaFutures wi
       bucket.bucketManager().createN1qlPrimaryIndex(true, false)
     }
 
-    "fail the stream when the query timeout happens" in {
+    "fail the stream when the query timeout happens" in eventually {
       val queryParams = N1qlParams.build().consistency(ScanConsistency.STATEMENT_PLUS)
       val stmt = select("*").from(bucket.name())
       val query = N1qlQuery.simple(

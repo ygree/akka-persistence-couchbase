@@ -51,6 +51,13 @@ class PersistentEntityRefSpec
       akka.remote.netty.tcp.hostname = 127.0.0.1
       akka.loglevel = INFO
       akka.cluster.sharding.distributed-data.durable.keys = []
+
+      couchbase-journal.connection.nodes = ["localhost"]
+      couchbase-journal.write.parallelism = 1
+      couchbase-journal.write.persist-to = none
+      couchbase-journal.write.replicate-to = none
+      couchbase-journal.write.write-timeout = 15s
+      couchbase-journal.write.read-timeout = 15s
   """).withFallback(CouchbasePersistenceSpec.couchbaseConfig())
 
   private val system: ActorSystem = ActorSystem(

@@ -4,6 +4,7 @@
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
+import akka.persistence.couchbase.CouchbaseJournalSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
 import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{
@@ -44,7 +45,12 @@ trait WriteSideCouchbasePersistenceComponents extends WriteSidePersistenceCompon
  * Read-side persistence Couchbase components (for compile-time injection).
  */
 trait ReadSideCouchbasePersistenceComponents extends ReadSidePersistenceComponents {
-  lazy val session: CouchbaseSession = ???
+
+  private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(
+    configuration.underlying.getConfig("couchbase-journal")
+  )
+
+  lazy val session: CouchbaseSession = CouchbaseSession(settings.sessionSettings, settings.bucket)
 
   private[lagom] lazy val couchbaseOffsetStore: CouchbaseOffsetStore =
     new ScaladslCouchbaseOffsetStore(actorSystem, session, readSideConfig)(executionContext)
