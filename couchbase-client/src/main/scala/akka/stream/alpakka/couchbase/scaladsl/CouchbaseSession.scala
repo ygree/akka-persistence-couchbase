@@ -15,6 +15,7 @@ import com.couchbase.client.java.query._
 import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster, CouchbaseCluster}
 
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 
 object CouchbaseSession {
 
@@ -69,7 +70,16 @@ trait CouchbaseSession {
    */
   def insert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument]
 
+  /**
+   * @return A document if found or none if there is no document for the id
+   */
   def get(id: String): Future[Option[JsonDocument]]
+
+  /**
+   * @param timeout fail the returned future with a TimeoutException if it takes longer than this
+   * @return A document if found or none if there is no document for the id
+   */
+  def get(id: String, timeout: FiniteDuration): Future[Option[JsonDocument]]
 
   /**
    * Upsert using the default write settings
@@ -107,10 +117,17 @@ trait CouchbaseSession {
    * @param id What counter document id
    * @param delta Value to increase the counter with if it does exist
    * @param initial Value to start from if the counter does not exist
-   * @return
+   * @return The value of the counter after applying the delta
    */
   def counter(id: String, delta: Long, initial: Long): Future[Long]
 
+  /**
+   * Create or increment a counter
+   * @param id What counter document id
+   * @param delta Value to increase the counter with if it does exist
+   * @param initial Value to start from if the counter does not exist
+   * @return The value of the counter after applying the delta
+   */
   def counter(id: String, delta: Long, initial: Long, writeSettings: CouchbaseWriteSettings): Future[Long]
 
   /**

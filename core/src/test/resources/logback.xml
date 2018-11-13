@@ -9,6 +9,7 @@
         </layout>
     </appender>
 
+    <logger name="akka" level="DEBUG" />
     <!--
     <logger name="akka" level="INFO" />
     <logger name="com.couchbase.client.core.node.Node" level="WARN"/>

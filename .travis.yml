@@ -33,18 +33,18 @@ jobs:
 
     - stage: test
     - env:
-        - PRE_CMD="docker-compose up -d couchbase"
+        - PRE_CMD="docker-compose -f docker/couchbase-1-node/docker-compose.yml up -d couchbase"
         - CMD=couchbaseClient/test
     - env:
-        - PRE_CMD="docker-compose up -d couchbase"
+        - PRE_CMD="docker-compose -f docker/couchbase-1-node/docker-compose.yml up -d couchbase"
         - CMD=core/test
     - env:
         - CMD=lagom-persistence-couchbase-core/test
     - env:
-        - PRE_CMD="docker-compose up -d couchbase"
+        - PRE_CMD="docker-compose -f docker/couchbase-1-node/docker-compose.yml up -d couchbase"
         - CMD=lagom-persistence-couchbase-javadsl/test
     - env:
-        - PRE_CMD="docker-compose up -d couchbase"
+        - PRE_CMD="docker-compose -f docker/couchbase-1-node/docker-compose.yml up -d couchbase"
         - CMD=lagom-persistence-couchbase-scaladsl/test
 
 stages:
@@ -57,7 +57,7 @@ stages:
     if: repo = akka/akka-persistence-couchbase AND ( ( branch = master AND type = push ) OR tag =~ ^v )
 
 after_failure:
-  - docker-compose logs
+  - docker-compose -f docker/couchbase-1-node/docker-compose.yml logs
   - find . -name "*.log" -exec ./scripts/cat-log.sh {} \;
 
 before_cache:

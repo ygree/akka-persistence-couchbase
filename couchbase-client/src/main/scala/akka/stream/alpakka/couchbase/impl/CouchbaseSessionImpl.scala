@@ -19,6 +19,7 @@ import com.couchbase.client.java.query.{N1qlQuery, Statement}
 import rx.RxReactiveStreams
 
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 
 /**
  *
@@ -44,6 +45,9 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
 
   def get(id: String): Future[Option[JsonDocument]] =
     zeroOrOneObservableToFuture(asyncBucket.get(id))
+
+  def get(id: String, timeout: FiniteDuration): Future[Option[JsonDocument]] =
+    zeroOrOneObservableToFuture(asyncBucket.get(id, timeout.toMillis, TimeUnit.MILLISECONDS))
 
   def upsert(document: JsonDocument): Future[JsonDocument] =
     singleObservableToFuture(asyncBucket.upsert(document), document.id)

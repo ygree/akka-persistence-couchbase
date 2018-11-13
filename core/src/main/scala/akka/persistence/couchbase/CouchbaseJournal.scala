@@ -6,9 +6,9 @@ package akka.persistence.couchbase
 
 import java.util.Base64
 
+import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
 import akka.event.Logging
-import akka.persistence.couchbase.CouchbaseJournal.Fields
 import akka.persistence.journal.{AsyncWriteJournal, Tagged}
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializationExtension}
@@ -25,10 +25,15 @@ import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
 import scala.collection.{immutable => im}
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
-object CouchbaseJournal {
+/**
+ * INTERNAL API
+ */
+@InternalApi
+private[akka] object CouchbaseJournal {
 
   case class TaggedPersistentRepr(pr: PersistentRepr, tags: Set[String])
 
@@ -86,15 +91,20 @@ object CouchbaseJournal {
     val SerializerId = "ser_id"
   }
 
+  private val ExtraSuccessFulUnit: Try[Unit] = Success(())
+
 }
 
-/*
-
-Need at least this GI:
-- create index pi2  on akka(akka.persistenceId, akka.sequence_from)
-
+/**
+ * INTERNAL API
+ *
+ * Need at least this GI:
+ * - create index pi2  on akka(akka.persistenceId, akka.sequence_from)
  */
+@InternalApi
 class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJournal {
+
+  import CouchbaseJournal._
 
   private implicit val ec: ExecutionContext = context.dispatcher
 
@@ -110,16 +120,47 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     CouchbaseJournalSettings(sharedConfig)
   }
 
-  val couchbase = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  private val couchbase = CouchbaseSession(settings.sessionSettings, settings.bucket)
 
-  override def postStop(): Unit =
+  // TODO how horrific is this query?
+  // select persistenceId, sequence_from from akka where akka.persistenceId = "pid1" order by sequence_from desc limit 1
+  private val highestSequenceNrStatement = select(Fields.SequenceTo)
+    .from(settings.bucket)
+    .where(
+      x(Fields.PersistenceId)
+        .eq(x("$1"))
+        .and(x(Fields.SequenceFrom).gte(x("$2")))
+    )
+    .orderBy(desc(Fields.SequenceFrom))
+    .limit(1)
+
+  // FIXME, needs an orderby make sure index works with it
+  // select * from akka where akka.persistenceId = "pid1" and sequence_from >= start and sequenceFrom <= end
+  // can't be a val because we need to limit and that mutates the statement :/
+  private def replayStatement =
+    select("*")
+      .from(settings.bucket)
+      .where(
+        x(Fields.PersistenceId)
+          .eq(x("$1"))
+          .and(
+            x(Fields.SequenceFrom)
+              .gte(x("$2"))
+              .and(Fields.SequenceFrom)
+              .lte(x("$3"))
+          )
+      )
+
+  override def postStop(): Unit = {
     couchbase.close()
+    materializer.shutdown()
+  }
 
   override def asyncWriteMessages(messages: im.Seq[AtomicWrite]): Future[im.Seq[Try[Unit]]] = {
     log.debug("asyncWriteMessages {}", messages)
     require(messages.nonEmpty)
     val pid = messages.head.persistenceId
-    val inserts: im.Seq[(String, JsonObject)] = messages.map(aw => {
+    val docsToInsert: im.Seq[JsonDocument] = messages.map(aw => {
       var allTags = Set.empty[String]
       val serialized: im.Seq[JsonObject] = aw.payload.map { msg =>
         val (event, tags) = msg.payload match {
@@ -127,8 +168,8 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
           case other => (other.asInstanceOf[AnyRef], Set.empty)
         }
         allTags = allTags ++ tags
-        val ser = Serialized.serialize(serialization, event)
-        ser
+        val serialized = Serialized.serialize(serialization, event)
+        serialized
           .asJson()
           .put("tags", JsonArray.from(tags.toList.asJava))
           .put(Fields.SequenceNr, msg.sequenceNr)
@@ -144,79 +185,72 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
         .put(Fields.SequenceTo, aw.highestSequenceNr)
         .put("messages", JsonArray.from(serialized.asJava))
         .put("all_tags", JsonArray.from(allTags.toList.asJava))
-      (s"$pid-${aw.lowestSequenceNr}", insert)
+        // FIXME temporary ordering solution #66
+        .put(Fields.Ordering, System.currentTimeMillis())
+      JsonDocument.create(s"$pid-${aw.lowestSequenceNr}", insert)
     })
 
-    // FIXME sequence will fail entire future rather than individual write
-    Future
-      .sequence(inserts.map {
-        case (persistenceId, json) =>
-          val p = Promise[Try[Unit]]()
-          // TODO make persistTo configurable
-          couchbase.counter(settings.bucket, 1, 0).flatMap { id =>
-            val withId = json.put(Fields.Ordering, id)
-            couchbase.insert(JsonDocument.create(persistenceId, withId))
-          }
-      })
-      .map(writes => writes.map(_ => Success(())))
+    val inserts: im.Seq[Future[Try[Unit]]] = docsToInsert.map(
+      doc =>
+        couchbase
+          .insert(doc, settings.writeSettings)
+          .map(json => ExtraSuccessFulUnit)(ExecutionContexts.sameThreadExecutionContext)
+          .recover {
+            // lift the failure to not fail the whole sequence
+            case NonFatal(ex) => Failure(ex)
+          }(ExecutionContexts.sameThreadExecutionContext)
+    )
+    Future.sequence(inserts)
   }
 
   override def asyncDeleteMessagesTo(persistenceId: String, toSequenceNr: Long): Future[Unit] = {
-    log.info("asyncDeleteMessagesTo {} {}", persistenceId, toSequenceNr)
+    log.debug("asyncDeleteMessagesTo {} {}", persistenceId, toSequenceNr)
     val docId = s"$persistenceId-meta"
     (if (toSequenceNr == Long.MaxValue) {
-       log.info("Journal cleanup (Long.MaxValue)")
+       log.debug("Journal cleanup (Long.MaxValue)")
        asyncReadHighestSequenceNr(persistenceId, 0).flatMap { highestSeqNr =>
-         couchbase.upsert(JsonDocument.create(docId, JsonObject.create().put("deleted_to", highestSeqNr)))
+         val doc = JsonDocument.create(docId, JsonObject.create().put("deleted_to", highestSeqNr))
+         couchbase.upsert(doc, settings.writeSettings)
        }
      } else {
-       couchbase.upsert(JsonDocument.create(docId, JsonObject.create().put("deleted_to", toSequenceNr)))
+       val doc = JsonDocument.create(docId, JsonObject.create().put("deleted_to", toSequenceNr))
+       couchbase.upsert(doc, settings.writeSettings)
      }).map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
-  // TODO use eventsByPersistenceId
   override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(
       recoveryCallback: PersistentRepr => Unit
   ): Future[Unit] = {
-    log.info("asyncReplayMessages {} {} {} {}", persistenceId, fromSequenceNr, toSequenceNr, max)
+    log.debug("asyncReplayMessages {} {} {} {}", persistenceId, fromSequenceNr, toSequenceNr, max)
 
     val deletedTo: Future[Long] =
       couchbase
-        .get(s"$persistenceId-meta")
+        .get(s"$persistenceId-meta", settings.readTimeout)
         .map {
           case Some(jsonDoc) =>
             val dt = jsonDoc.content().getLong("deleted_to").toLong
-            log.info("Previously deleted to: {}", dt)
+            log.debug("Previously deleted to: {}", dt)
             dt + 1 // start at the next sequence nr
           case None => fromSequenceNr
         }
 
     val replayFinished: Future[Unit] = deletedTo.flatMap { starting =>
-      log.info("Starting at sequence_nr {}", starting)
+      log.debug("Starting at sequence_nr {}, query: {}", starting, replayStatement)
 
-      // FIXME, needs an orderby make sure index works with it
-      val replayQuery = select("*")
-        .from(settings.bucket)
-        .where(
-          x(Fields.PersistenceId)
-            .eq(x("$1"))
-            .and(
-              x(Fields.SequenceFrom)
-                .gte(starting)
-                .and(Fields.SequenceFrom)
-                .lte(toSequenceNr)
-            )
-        )
+      val limitedStatement =
+        if (max >= 0 && max != Long.MaxValue) {
+          if (max > Int.MaxValue.toLong) {
+            throw new IllegalArgumentException(s"Couchbase cannot limit replay at more than ${Int.MaxValue}, got $max")
+          }
+          replayStatement.limit(max.toInt)
+        } else replayStatement
 
-      log.info("Query: " + replayQuery)
-      val query = N1qlQuery.parameterized(replayQuery, JsonArray.from(persistenceId))
+      val query =
+        N1qlQuery.parameterized(limitedStatement,
+                                JsonArray.from(persistenceId, starting: java.lang.Long, toSequenceNr: java.lang.Long))
+      val source = couchbase.streamedQuery(query)
 
-      val source =
-        if (max >= 0 && max != Long.MaxValue)
-          couchbase.streamedQuery(query).take(max) // FIXME make sure this cancels the query
-        else couchbase.streamedQuery(query)
-
-      val done = source
+      source
         .runForeach(
           json =>
             CouchbaseJournal
@@ -225,50 +259,30 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
                 recoveryCallback(pr)
             }
         )
-
-      done.onComplete {
-        case Failure(ex) =>
-          // FIXME this is just to see errors in development?
-          ex.printStackTrace(System.out)
-        case _ =>
-      }
-      done.map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
+        .map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
     }
 
     replayFinished
   }
 
-  // TODO how horrific is this query?
-  // select persistenceId, sequence_from from akka where akka.persistenceId = "pid1" order by sequence_from desc limit 1
   override def asyncReadHighestSequenceNr(persistenceId: String, fromSequenceNr: Long): Future[Long] = {
-    log.info("asyncReadHighestSequenceNr {} {}", persistenceId, fromSequenceNr)
+    log.debug("asyncReadHighestSequenceNr {} {}", persistenceId, fromSequenceNr)
 
-    val highestSequenceNrStatement = select(Fields.SequenceTo)
-      .from(settings.bucket)
-      .where(
-        x(Fields.PersistenceId)
-          .eq(x("$1"))
-          .and(x(Fields.SequenceFrom).gte(fromSequenceNr))
-      )
-      .orderBy(desc(Fields.SequenceFrom))
-      .limit(1)
+    val highestSequenceNrQuery = N1qlQuery.parameterized(
+      highestSequenceNrStatement,
+      JsonArray.from(persistenceId, fromSequenceNr: java.lang.Long),
+      // Without this the index that gets the latest sequence nr may have not seen the last write of the last version
+      // of this persistenceId. This seems overkill.
+      N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+    )
 
-    // Without this the index that gets the latest sequence nr may have not seen the last write of the last version
-    // of this persistenceId. This seems overkill.
-    val params: N1qlParams = N1qlParams
-      .build()
-      .consistency(ScanConsistency.REQUEST_PLUS)
-
-    val highestSequenceNrQuery =
-      N1qlQuery.parameterized(highestSequenceNrStatement, JsonArray.from(persistenceId), params)
-
-    log.info("Executing: {}", highestSequenceNrQuery)
+    log.debug("Executing: {}", highestSequenceNrQuery)
 
     couchbase
       .singleResponseQuery(highestSequenceNrQuery)
       .map {
         case Some(jsonObj) =>
-          log.info("sequence nr: {}", jsonObj)
+          log.debug("sequence nr: {}", jsonObj)
           jsonObj.getLong("sequence_to")
         case None =>
           0L
