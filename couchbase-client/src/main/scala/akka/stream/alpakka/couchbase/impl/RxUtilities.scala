@@ -5,6 +5,7 @@
 package akka.stream.alpakka.couchbase.impl
 
 import akka.annotation.InternalApi
+import akka.stream.alpakka.couchbase.CouchbaseResponseException
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{AsyncN1qlQueryResult, AsyncN1qlQueryRow}
 import rx.functions.Func1
@@ -17,10 +18,6 @@ import scala.concurrent.{Future, Promise}
  */
 @InternalApi
 private[couchbase] object RxUtilities {
-  val unfoldRows = new Func1[AsyncN1qlQueryResult, Observable[AsyncN1qlQueryRow]] {
-    def call(t: AsyncN1qlQueryResult): Observable[AsyncN1qlQueryRow] =
-      t.rows()
-  }
 
   val unfoldDocument = new Func1[AsyncN1qlQueryRow, JsonObject] {
     def call(row: AsyncN1qlQueryRow): JsonObject =
@@ -28,9 +25,17 @@ private[couchbase] object RxUtilities {
 
   }
 
+  val failStreamOnError = new Func1[JsonObject, Observable[JsonObject]] {
+    override def call(err: JsonObject): Observable[JsonObject] =
+      Observable.error(CouchbaseResponseException(err))
+  }
+
   val unfoldJsonObjects = new Func1[AsyncN1qlQueryResult, Observable[JsonObject]] {
-    def call(t: AsyncN1qlQueryResult): Observable[JsonObject] =
-      t.rows().map(unfoldDocument)
+    def call(t: AsyncN1qlQueryResult): Observable[JsonObject] = {
+      val data: Observable[JsonObject] = t.rows().map(unfoldDocument)
+      val errors = t.errors().flatMap(failStreamOnError)
+      data.mergeWith(errors)
+    }
   }
 
   def singleObservableToFuture[T](o: Observable[T], id: Any): Future[T] = {

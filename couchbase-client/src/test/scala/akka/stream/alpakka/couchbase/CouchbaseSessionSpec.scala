@@ -26,9 +26,6 @@ import scala.concurrent.duration._
 
 class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with BeforeAndAfterAll with Eventually {
 
-  // FIXME use a automagic docker-couchbase
-  // currently requires a running couchbase with an admin account named 'admin' with password 'admin1'
-
   override implicit def patienceConfig: PatienceConfig = PatienceConfig(5.seconds, 150.millis)
 
   private implicit val system = ActorSystem("CouchbaseSessionSpec")
