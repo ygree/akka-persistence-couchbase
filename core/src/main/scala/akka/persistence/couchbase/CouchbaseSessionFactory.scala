@@ -4,6 +4,7 @@
 
 package akka.persistence.couchbase
 import akka.actor.ActorSystem
+import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
 import akka.stream.alpakka.couchbase.CouchbaseSessionSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
@@ -11,18 +12,19 @@ import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import scala.concurrent.Await
 import scala.util.{Failure, Success}
 
+/**
+ * Internal API
+ */
+@InternalApi
 object CouchbaseSessionFactory {
 
   def apply(system: ActorSystem,
             sessionSettings: CouchbaseSessionSettings,
             bucket: String,
-            indexAutoCreate: Boolean = true): CouchbaseSession = {
+            indexAutoCreate: Boolean): CouchbaseSession = {
 
     val log = system.log
 
-//    implicit val ec = system.dispatcher //TODO use another execution context for blocking operations
-
-    //TODO
     val session = CouchbaseSession(sessionSettings, bucket)
 
     import scala.concurrent.duration._
@@ -31,8 +33,7 @@ object CouchbaseSessionFactory {
       val future = session.createIndex("pi2", true, "persistence_id", "sequence_from")
 
       Await
-        .ready(future, 30.seconds)
-//      future
+        .ready(future, 30.seconds) //FIXME
         .onComplete {
           case Success(true) =>
             log.info("Indexes have been created successfully.")

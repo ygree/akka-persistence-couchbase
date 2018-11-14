@@ -119,7 +119,8 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     CouchbaseJournalSettings(sharedConfig)
   }
 
-  private val couchbase = CouchbaseSessionFactory(context.system, settings.sessionSettings, settings.bucket)
+  private val couchbase =
+    CouchbaseSessionFactory(context.system, settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
 
   // TODO how horrific is this query?
   // select persistenceId, sequence_from from akka where akka.persistenceId = "pid1" order by sequence_from desc limit 1

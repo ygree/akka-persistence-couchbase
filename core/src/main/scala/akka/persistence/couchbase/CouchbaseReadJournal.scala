@@ -50,7 +50,8 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
 
     CouchbaseReadJournalSettings(sharedConfig)
   }
-  private val session = CouchbaseSessionFactory(system, settings.sessionSettings, settings.bucket)
+  private val session =
+    CouchbaseSessionFactory(system, settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
 
   system.registerOnTermination {
     session.close()
