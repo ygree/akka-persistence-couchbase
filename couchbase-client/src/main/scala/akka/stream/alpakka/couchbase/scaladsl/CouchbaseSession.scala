@@ -83,18 +83,21 @@ trait CouchbaseSession {
 
   /**
    * Upsert using the default write settings
+   *
    * @return a future that completes when the upsert is done
    */
   def upsert(document: JsonDocument): Future[JsonDocument]
 
   /**
    * FIXME what happens if the id is missing?
+   *
    * @return a future that completes when the upsert is done
    */
   def upsert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument]
 
   /**
    * Remove a document by id using the default write settings.
+   *
    * @return Future that completes when the document has been removed, if there is no such document
    *         the future is failed with a `DocumentDoesNotExistException`
    */
@@ -102,6 +105,7 @@ trait CouchbaseSession {
 
   /**
    * Remove a document by id using the default write settings.
+   *
    * @return Future that completes when the document has been removed, if there is no such document
    *         the future is failed with a `DocumentDoesNotExistException`
    */
@@ -114,6 +118,7 @@ trait CouchbaseSession {
 
   /**
    * Create or increment a counter
+   *
    * @param id What counter document id
    * @param delta Value to increase the counter with if it does exist
    * @param initial Value to start from if the counter does not exist
@@ -123,6 +128,7 @@ trait CouchbaseSession {
 
   /**
    * Create or increment a counter
+   *
    * @param id What counter document id
    * @param delta Value to increase the counter with if it does exist
    * @param initial Value to start from if the counter does not exist
@@ -134,4 +140,16 @@ trait CouchbaseSession {
    * Close the session and release all resources it holds. Subsequent calls to other methods will likely fail.
    */
   def close(): Future[Done]
+
+  /**
+   * Create a secondary index for the current bucket.
+   *
+   * @param indexName the name of the index.
+   * @param ignoreIfExist if a secondary index already exists with that name, an exception will be thrown unless this
+   *                      is set to true.
+   * @param fields the JSON fields to index.
+   * @return an {@link scala.concurrent.Future} of true if the index was effectively created, false
+   *      if the index existed and ignoreIfExist is true.
+   */
+  def createIndex(indexName: String, ignoreIfExist: Boolean, fields: String*): Future[Boolean]
 }

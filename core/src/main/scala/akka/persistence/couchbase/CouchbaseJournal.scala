@@ -13,7 +13,6 @@ import akka.persistence.journal.{AsyncWriteJournal, Tagged}
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializationExtension}
 import akka.stream.ActorMaterializer
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
 import com.couchbase.client.java.query.Select.select
@@ -120,7 +119,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     CouchbaseJournalSettings(sharedConfig)
   }
 
-  private val couchbase = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  private val couchbase = CouchbaseSessionFactory(context.system, settings.sessionSettings, settings.bucket)
 
   // TODO how horrific is this query?
   // select persistenceId, sequence_from from akka where akka.persistenceId = "pid1" order by sequence_from desc limit 1
@@ -165,7 +164,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
       val serialized: im.Seq[JsonObject] = aw.payload.map { msg =>
         val (event, tags) = msg.payload match {
           case t: Tagged => (t.payload.asInstanceOf[AnyRef], t.tags)
-          case other => (other.asInstanceOf[AnyRef], Set.empty)
+          case other => (other.asInstanceOf[AnyRef], Set.empty[String])
         }
         allTags = allTags ++ tags
         val serialized = Serialized.serialize(serialization, event)

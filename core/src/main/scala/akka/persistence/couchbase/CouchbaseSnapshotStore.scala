@@ -9,7 +9,6 @@ import akka.persistence.couchbase.CouchbaseJournal.Fields
 import akka.persistence.snapshot.SnapshotStore
 import akka.persistence.{SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria}
 import akka.serialization.SerializationExtension
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
 import com.couchbase.client.java.error.DocumentDoesNotExistException
@@ -20,7 +19,6 @@ import com.couchbase.client.java.query.dsl.Expression
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.Sort._
 import com.couchbase.client.java.query.{N1qlQuery, _}
-import com.couchbase.client.java.{Cluster, CouchbaseCluster}
 import com.typesafe.config.Config
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -38,7 +36,7 @@ class CouchbaseSnapshotStore(cfg: Config, configPath: String) extends SnapshotSt
   }
   private implicit val ec: ExecutionContext = context.dispatcher
 
-  val couchbase = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  val couchbase = CouchbaseSessionFactory(context.system, settings.sessionSettings, settings.bucket)
   val serialization = SerializationExtension(context.system)
 
   /**

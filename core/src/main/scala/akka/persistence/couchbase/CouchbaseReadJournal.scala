@@ -10,9 +10,7 @@ import akka.persistence.couchbase.CouchbaseJournal.{deserialize, extractTaggedEv
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
 import akka.serialization.{Serialization, SerializationExtension}
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
-import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
@@ -52,7 +50,7 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
 
     CouchbaseReadJournalSettings(sharedConfig)
   }
-  private val session = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  private val session = CouchbaseSessionFactory(system, settings.sessionSettings, settings.bucket)
 
   system.registerOnTermination {
     session.close()

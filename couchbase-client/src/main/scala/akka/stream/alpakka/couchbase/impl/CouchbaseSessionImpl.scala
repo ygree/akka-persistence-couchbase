@@ -16,7 +16,8 @@ import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster}
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
-import rx.RxReactiveStreams
+import rx.functions.Func1
+import rx.{Observable, RxReactiveStreams}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
@@ -75,8 +76,6 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
 
   def streamedQuery(query: N1qlQuery): Source[JsonObject, NotUsed] =
     // FIXME change this so that it does paging if possible
-    // FIXME verify back pressure works
-    // FIXME verify cancellation works
     Source.fromPublisher(RxReactiveStreams.toPublisher(asyncBucket.query(query).flatMap(RxUtilities.unfoldJsonObjects)))
 
   def streamedQuery(query: Statement): Source[JsonObject, NotUsed] =
@@ -117,5 +116,28 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
       Future.successful(Done)
     }
 
+  override def createIndex(indexName: String, ignoreIfExist: Boolean, fields: String*): Future[Boolean] = {
+
+    val result: Observable[Boolean] = asyncBucket
+      .bucketManager()
+      .flatMap(
+        func1Observable(_.createN1qlIndex(indexName, ignoreIfExist, false, fields: _*))
+      )
+      .map(func1(Boolean.unbox))
+
+    RxUtilities.singleObservableToFuture(result, s"Create index: $indexName")
+  }
+
   override def toString: String = s"CouchbaseSession(${bucket.name()})"
+
+  private def func1Observable[T, R](fun: T => Observable[R]) =
+    new Func1[T, Observable[R]]() {
+      override def call(b: T): Observable[R] = fun(b)
+    }
+
+  private def func1[T, R](fun: T => R) =
+    new Func1[T, R]() {
+      override def call(b: T): R = fun(b)
+    }
+
 }
