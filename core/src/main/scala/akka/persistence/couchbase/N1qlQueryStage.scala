@@ -10,8 +10,10 @@ import com.couchbase.client.java.AsyncBucket
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{AsyncN1qlQueryResult, AsyncN1qlQueryRow, N1qlQuery}
 import rx.functions.Func1
-import rx.{Observable, Subscriber}
+import rx.observables.AsyncOnSubscribe
+import rx.{Observable, Observer, Subscriber}
 
+import scala.concurrent.{Future, Promise}
 import scala.concurrent.duration._
 
 object N1qlQueryStage {
@@ -36,7 +38,7 @@ class N1qlQueryStage[S](live: Boolean,
                         pageSize: Int,
                         initialQuery: N1qlQuery,
                         namedParams: JsonObject,
-                        bucket: AsyncBucket,
+                        bucket: Observable[AsyncBucket],
                         initialState: S,
                         nextQuery: S => Option[N1qlQuery],
                         updateState: (S, AsyncN1qlQueryRow) => S)
@@ -134,8 +136,11 @@ class N1qlQueryStage[S](live: Boolean,
       state = Querying
       // FIXME deal with initial errors
       // FIXME passing a chunk across the async callback seems better than unfolding first?
+
       bucket
-        .query(query)
+        .flatMap(new Func1[AsyncBucket, Observable[AsyncN1qlQueryResult]]() {
+          override def call(b: AsyncBucket): Observable[AsyncN1qlQueryResult] = b.query(query)
+        })
         .flatMap(N1qlQueryStage.unfoldRows)
         .subscribe(new Subscriber[AsyncN1qlQueryRow]() {
           override def onCompleted(): Unit = completeCb.invoke(())

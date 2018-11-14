@@ -12,7 +12,8 @@ import scala.concurrent.duration._
 final class CouchbaseJournalSettings private (val sessionSettings: CouchbaseSessionSettings,
                                               val bucket: String,
                                               val writeSettings: CouchbaseWriteSettings,
-                                              val readTimeout: FiniteDuration)
+                                              val readTimeout: FiniteDuration,
+                                              val indexAutocreate: Boolean)
 
 object CouchbaseJournalSettings {
 
@@ -27,8 +28,9 @@ object CouchbaseJournalSettings {
       timeout = config.getDuration("write.write-timeout").toMillis.millis
     )
     val readTimeout = config.getDuration("write.read-timeout").toMillis.millis
+    val indexAutocreate = config.getBoolean("write.index-autocreate")
 
-    new CouchbaseJournalSettings(sessionSettings, bucket, writeSettings, readTimeout)
+    new CouchbaseJournalSettings(sessionSettings, bucket, writeSettings, readTimeout, indexAutocreate)
   }
 
   private def parseReplicateTo(value: String): ReplicateTo = value match {

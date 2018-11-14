@@ -14,6 +14,8 @@ import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializationExtension}
 import akka.stream.ActorMaterializer
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import com.couchbase.client.java.AsyncBucket
+import com.couchbase.client.java.bucket.AsyncBucketManager
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
 import com.couchbase.client.java.query.Select.select
@@ -22,6 +24,8 @@ import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.Sort._
 import com.typesafe.config.Config
+import rx.Observable
+import rx.functions.Func1
 
 import scala.collection.JavaConverters._
 import scala.collection.{immutable => im}
@@ -120,7 +124,33 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     CouchbaseJournalSettings(sharedConfig)
   }
 
-  private val couchbase = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  //TODO: extract these helpers to common place
+  private def flatMapResult[T, R](fun: T => Observable[R]) =
+    new Func1[T, Observable[R]]() {
+      override def call(b: T): Observable[R] = fun(b)
+    }
+
+  private def mapResult[T, R](fun: T => R) =
+    new Func1[T, R]() {
+      override def call(b: T): R = fun(b)
+    }
+
+  def initSession(bucket: AsyncBucket): Observable[AsyncBucket] =
+    if (settings.indexAutocreate) {
+
+      bucket
+        .bucketManager()
+        .flatMap(
+          flatMapResult[AsyncBucketManager, java.lang.Boolean](
+            _.createN1qlIndex("pi2", true, false, "persistence_id", "sequence_from")
+          )
+        )
+        .map(mapResult(_ => bucket))
+    } else {
+      Observable.just(bucket)
+    }
+
+  private val couchbase = CouchbaseSession(settings.sessionSettings, settings.bucket, initSession)
 
   // TODO how horrific is this query?
   // select persistenceId, sequence_from from akka where akka.persistenceId = "pid1" order by sequence_from desc limit 1
@@ -165,7 +195,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
       val serialized: im.Seq[JsonObject] = aw.payload.map { msg =>
         val (event, tags) = msg.payload match {
           case t: Tagged => (t.payload.asInstanceOf[AnyRef], t.tags)
-          case other => (other.asInstanceOf[AnyRef], Set.empty)
+          case other => (other.asInstanceOf[AnyRef], Set.empty[String])
         }
         allTags = allTags ++ tags
         val serialized = Serialized.serialize(serialization, event)
