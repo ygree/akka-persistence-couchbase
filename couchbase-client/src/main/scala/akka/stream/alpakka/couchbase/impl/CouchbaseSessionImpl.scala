@@ -38,12 +38,12 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: Observable[Asyn
   override def underlying: Observable[AsyncBucket] = asyncBucket
 
   def insert(document: JsonDocument): Future[JsonDocument] =
-    singleObservableToFuture(asyncBucket.flatMap(flatMapResult(_.insert(document))), document)
+    singleObservableToFuture(asyncBucket.flatMap(func1Observable(_.insert(document))), document)
 
   def insert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument] =
     singleObservableToFuture(
       asyncBucket.flatMap(
-        flatMapResult(
+        func1Observable(
           _.insert(document, writeSettings.persistTo, writeSettings.timeout.toMillis, TimeUnit.MILLISECONDS)
         )
       ),
@@ -51,18 +51,20 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: Observable[Asyn
     )
 
   def get(id: String): Future[Option[JsonDocument]] =
-    zeroOrOneObservableToFuture(asyncBucket.flatMap(flatMapResult(_.get(id))))
+    zeroOrOneObservableToFuture(asyncBucket.flatMap(func1Observable(_.get(id))))
 
   def get(id: String, timeout: FiniteDuration): Future[Option[JsonDocument]] =
-    zeroOrOneObservableToFuture(asyncBucket.flatMap(flatMapResult(_.get(id, timeout.toMillis, TimeUnit.MILLISECONDS))))
+    zeroOrOneObservableToFuture(
+      asyncBucket.flatMap(func1Observable(_.get(id, timeout.toMillis, TimeUnit.MILLISECONDS)))
+    )
 
   def upsert(document: JsonDocument): Future[JsonDocument] =
-    singleObservableToFuture(asyncBucket.flatMap(flatMapResult(_.upsert(document))), document.id)
+    singleObservableToFuture(asyncBucket.flatMap(func1Observable(_.upsert(document))), document.id)
 
   def upsert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument] =
     singleObservableToFuture(
       asyncBucket.flatMap(
-        flatMapResult(
+        func1Observable(
           _.upsert(document,
                    writeSettings.persistTo,
                    writeSettings.replicateTo,
@@ -74,13 +76,13 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: Observable[Asyn
     )
 
   def remove(id: String): Future[Done] =
-    singleObservableToFuture(asyncBucket.flatMap(flatMapResult(_.remove(id))), id)
+    singleObservableToFuture(asyncBucket.flatMap(func1Observable(_.remove(id))), id)
       .map(_ => Done)(ExecutionContexts.sameThreadExecutionContext)
 
   def remove(id: String, writeSettings: CouchbaseWriteSettings): Future[Done] =
     singleObservableToFuture(
       asyncBucket.flatMap(
-        flatMapResult(
+        func1Observable(
           _.remove(id,
                    writeSettings.persistTo,
                    writeSettings.replicateTo,
@@ -98,17 +100,17 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: Observable[Asyn
     Source.fromPublisher(
       RxReactiveStreams.toPublisher(
         asyncBucket
-          .flatMap(flatMapResult(_.query(query)))
+          .flatMap(func1Observable(_.query(query)))
           .flatMap(RxUtilities.unfoldJsonObjects)
       )
     )
 
-  private def flatMapResult[R](fun: AsyncBucket => Observable[R]) =
-    new Func1[AsyncBucket, Observable[R]]() {
-      override def call(b: AsyncBucket): Observable[R] = fun(b)
+  private def func1Observable[T, R](fun: T => Observable[R]) =
+    new Func1[T, Observable[R]]() {
+      override def call(b: T): Observable[R] = fun(b)
     }
 
-  private def mapResult[T, R](fun: T => R) =
+  private def func1[T, R](fun: T => R) =
     new Func1[T, R]() {
       override def call(b: T): R = fun(b)
     }
@@ -117,7 +119,7 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: Observable[Asyn
     Source.fromPublisher(
       RxReactiveStreams.toPublisher(
         asyncBucket
-          .flatMap(flatMapResult(_.query(query)))
+          .flatMap(func1Observable(_.query(query)))
           .flatMap(RxUtilities.unfoldJsonObjects)
       )
     )
@@ -126,17 +128,17 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: Observable[Asyn
     singleResponseQuery(N1qlQuery.simple(query))
   def singleResponseQuery(query: N1qlQuery): Future[Option[JsonObject]] =
     zeroOrOneObservableToFuture(
-      asyncBucket.flatMap(flatMapResult(_.query(query))).flatMap(RxUtilities.unfoldJsonObjects)
+      asyncBucket.flatMap(func1Observable(_.query(query))).flatMap(RxUtilities.unfoldJsonObjects)
     )
 
   def counter(id: String, delta: Long, initial: Long): Future[Long] =
-    singleObservableToFuture(asyncBucket.flatMap(flatMapResult(_.counter(id, delta, initial))), id)
+    singleObservableToFuture(asyncBucket.flatMap(func1Observable(_.counter(id, delta, initial))), id)
       .map(_.content(): Long)(ExecutionContexts.sameThreadExecutionContext)
 
   def counter(id: String, delta: Long, initial: Long, writeSettings: CouchbaseWriteSettings): Future[Long] =
     singleObservableToFuture(
       asyncBucket.flatMap(
-        mapResult(
+        func1(
           _.counter(id,
                     delta,
                     initial,
@@ -150,14 +152,14 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: Observable[Asyn
     ).map(_.content(): Long)(ExecutionContexts.sameThreadExecutionContext)
 
   def close(): Future[Done] = {
-    val result: Observable[Done] = asyncBucket.flatMap(flatMapResult[Done](b => {
+    val result: Observable[Done] = asyncBucket.flatMap(func1Observable(b => {
       if (b.isClosed) {
         Observable.fromCallable(new Callable[Done]() {
           override def call() = Done
         })
       } else {
         b.close()
-          .map[Done](mapResult[java.lang.Boolean, Done]((_: java.lang.Boolean) => {
+          .map[Done](func1[java.lang.Boolean, Done]((_: java.lang.Boolean) => {
             Done
           }))
       }
