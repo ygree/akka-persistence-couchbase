@@ -7,7 +7,7 @@ package com.lightbend.lagom.javadsl.persistence.couchbase
 import java.net.URI
 
 import akka.actor.ActorSystem
-import akka.persistence.couchbase.CouchbaseJournalSettings
+import akka.persistence.couchbase.{CouchbaseJournalSettings, CouchbaseSessionFactory}
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.google.inject.Provider
 import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{
@@ -24,7 +24,7 @@ import javax.inject.Inject
 import play.api.inject.{Binding, Injector, Module}
 import play.api.{Configuration, Environment}
 
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import scala.util.Try
 
 /**
@@ -46,16 +46,19 @@ class CouchbasePersistenceModule extends Module {
 
 }
 
-private[lagom] class CouchbaseSessionProvider @Inject()(cfg: Config) extends Provider[CouchbaseSession] {
+private[lagom] class CouchbaseSessionProvider @Inject()(system: ActorSystem, cfg: Config)
+    extends Provider[CouchbaseSession] {
 
   private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(cfg.getConfig("couchbase-journal"))
   //  private implicit val ec: ExecutionContext = context.dispatcher
 
-  val session = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  val session = CouchbaseSessionFactory(system, settings.sessionSettings, settings.bucket, false)
+
+  import scala.concurrent.duration._
 
   override def get(): CouchbaseSession =
     //TODO:
-    session
+    Await.result(session, 30.seconds)
 }
 
 private[lagom] object CouchbasePersistenceModule {

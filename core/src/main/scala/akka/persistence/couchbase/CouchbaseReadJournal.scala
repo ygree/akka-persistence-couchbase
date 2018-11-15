@@ -51,6 +51,8 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
 
     CouchbaseReadJournalSettings(sharedConfig)
   }
+
+  println("CouchbaseReadJournal.indexAutoCreate = " + settings.indexAutoCreate)
   private val session =
     CouchbaseSessionFactory(system, settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
 

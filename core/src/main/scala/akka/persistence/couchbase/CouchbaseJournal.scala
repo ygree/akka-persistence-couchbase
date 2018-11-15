@@ -119,6 +119,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     CouchbaseJournalSettings(sharedConfig)
   }
 
+  println("CouchbaseJournal.indexAutoCreate = " + settings.indexAutoCreate)
   private val couchbase =
     CouchbaseSessionFactory(context.system, settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
 

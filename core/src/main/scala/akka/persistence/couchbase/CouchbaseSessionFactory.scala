@@ -18,37 +18,39 @@ import scala.util.{Failure, Success}
 @InternalApi
 object CouchbaseSessionFactory {
 
-  private var session: CouchbaseSession = _
+  private var session: Future[CouchbaseSession] = _
 
   def apply(system: ActorSystem,
             sessionSettings: CouchbaseSessionSettings,
             bucket: String,
             indexAutoCreate: Boolean): Future[CouchbaseSession] = {
 
+    import system.dispatcher
+
     val log = system.log
 
     synchronized {
       if (session == null) {
-        session = CouchbaseSession(sessionSettings, bucket) //TODO use asyncCluster and connect asynchronously
+        session = CouchbaseSession.async(sessionSettings, bucket) //TODO use asyncCluster and connect asynchronously
       }
     }
 
-    if (indexAutoCreate) {
-      val future = session.createIndex("pi2", true, "persistence_id", "sequence_from")
+//    if (!indexAutoCreate) {
+//      session
+//    } else {
+    val future = session.flatMap(_.createIndex("pi2", true, "persistence_id", "sequence_from"))
 
-      future.onComplete {
-        case Success(true) =>
-          log.info("Indexes have been created successfully.")
-        case Success(false) =>
-          log.info("Indexes already exist.")
-        case Failure(t) =>
-          log.error(t, "Couldn't create indexes")
-      }(ExecutionContexts.sameThreadExecutionContext)
-
-      return future.map(_ => session)(system.dispatcher)
+    future.onComplete {
+      case Success(true) =>
+        log.info("Indexes have been created successfully.")
+      case Success(false) =>
+        log.info("Indexes already exist.")
+      case Failure(t) =>
+        log.error(t, "Couldn't create indexes")
     }
 
-    Future.successful(session)
+    future.flatMap(_ => session)
+//    }
   }
 
 }

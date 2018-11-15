@@ -5,17 +5,18 @@
 package akka.stream.alpakka.couchbase.scaladsl
 
 import akka.annotation.DoNotInherit
-import akka.stream.alpakka.couchbase.impl.CouchbaseSessionImpl
+import akka.stream.alpakka.couchbase.impl.{CouchbaseSessionImpl, RxUtilities}
 import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
+import com.couchbase.client.java._
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
+import com.couchbase.client.java.env.DefaultCouchbaseEnvironment
 import com.couchbase.client.java.query._
-import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster, CouchbaseCluster}
 
-import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{ExecutionContext, Future}
 
 object CouchbaseSession {
 
@@ -33,7 +34,23 @@ object CouchbaseSession {
       }
     cluster.authenticate(settings.username, settings.password)
     val bucket = cluster.openBucket(bucketName)
-    new CouchbaseSessionImpl(bucket, Some(cluster))
+    new CouchbaseSessionImpl(bucket.async(), Some(cluster), None)
+  }
+
+  /**
+   * Create a session against the given bucket. The couchbase client used to connect will be created and then closed when
+   * the session is closed.
+   */
+  def async(settings: CouchbaseSessionSettings,
+            bucketName: String)(implicit ec: ExecutionContext): Future[CouchbaseSession] = {
+
+    val environment = settings.environment.getOrElse(DefaultCouchbaseEnvironment.create())
+
+    for {
+      cluster <- Future(CouchbaseAsyncCluster.create(environment, settings.nodes: _*)) // CouchbaseAsyncCluster.create is blocking
+        .map(_.authenticate(settings.username, settings.password))
+      bucket <- RxUtilities.singleObservableToFuture(cluster.openBucket(bucketName), "")
+    } yield new CouchbaseSessionImpl(bucket, None, Some(cluster))
   }
 
   /**
@@ -41,7 +58,7 @@ object CouchbaseSession {
    * that the bucket was created with.
    */
   def apply(bucket: Bucket): CouchbaseSession =
-    new CouchbaseSessionImpl(bucket, None)
+    new CouchbaseSessionImpl(bucket.async(), None, None)
 
 }
 

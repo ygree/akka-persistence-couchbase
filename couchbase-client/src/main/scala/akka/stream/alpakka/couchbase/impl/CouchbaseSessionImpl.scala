@@ -12,10 +12,10 @@ import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
-import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster}
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
+import com.couchbase.client.java.{AsyncBucket, AsyncCluster, Cluster}
 import rx.functions.Func1
 import rx.{Observable, RxReactiveStreams}
 
@@ -29,8 +29,11 @@ import scala.concurrent.duration.FiniteDuration
  * InternalAPI
  */
 @InternalApi
-final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Option[Cluster]) extends CouchbaseSession {
-  private val asyncBucket = bucket.async()
+final private[couchbase] class CouchbaseSessionImpl(bucket: AsyncBucket,
+                                                    cluster: Option[Cluster],
+                                                    asyncCluster: Option[AsyncCluster])
+    extends CouchbaseSession {
+  private val asyncBucket = bucket
   import RxUtilities._
 
   override def underlying: AsyncBucket = asyncBucket
@@ -102,6 +105,7 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
       .map(_.content(): Long)(ExecutionContexts.sameThreadExecutionContext)
 
   def close(): Future[Done] =
+    //TODO close asyncCluster
     if (!asyncBucket.isClosed) {
       singleObservableToFuture(asyncBucket.close(), "close")
         .map { _ =>
