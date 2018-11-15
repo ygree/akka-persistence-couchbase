@@ -29,6 +29,7 @@ object CouchbaseSessionFactory {
 
     val log = system.log
 
+    //TODO use more robust solution, i.e. ActorSystem extension
     synchronized {
       if (session == null) {
         session = CouchbaseSession.async(sessionSettings, bucket) //TODO use asyncCluster and connect asynchronously
