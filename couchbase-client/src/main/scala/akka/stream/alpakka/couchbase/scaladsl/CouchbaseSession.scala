@@ -25,23 +25,23 @@ object CouchbaseSession {
    * the session is closed.
    */
   def apply(settings: CouchbaseSessionSettings, bucketName: String): Future[CouchbaseSession] = {
+    //TODO is it Okay to use global context here
+    implicit val ec = ExecutionContexts.global
+
     // FIXME here be blocking
     // FIXME make the settings => cluster logic public API so we can reuse it in journal?
-    val asyncCluster: CouchbaseAsyncCluster =
-      settings.environment match {
+    //wrap CouchbaseAsyncCluster.create up in the Future because it's blocking
+    val asyncCluster: Future[AsyncCluster] =
+      Future(settings.environment match {
         case Some(environment) =>
-          CouchbaseAsyncCluster
-            .create(environment, settings.nodes: _*)
+          CouchbaseAsyncCluster.create(environment, settings.nodes: _*)
         case None =>
-          CouchbaseAsyncCluster
-            .create(settings.nodes: _*)
-      }
+          CouchbaseAsyncCluster.create(settings.nodes: _*)
+      }).map(_.authenticate(settings.username, settings.password))
 
-    asyncCluster.authenticate(settings.username, settings.password)
-
-    RxUtilities
-      .singleObservableToFuture(asyncCluster.openBucket(bucketName), "")
-      .map(bucket => new CouchbaseSessionImpl(bucket, Some(asyncCluster)))(ExecutionContexts.global()) //TODO is it Okay to use global context here
+    asyncCluster
+      .flatMap(c => RxUtilities.singleObservableToFuture(c.openBucket(bucketName), "").map((c, _)))
+      .map { case (c, bucket) => new CouchbaseSessionImpl(bucket, Some(c)) }
   }
 
   /**

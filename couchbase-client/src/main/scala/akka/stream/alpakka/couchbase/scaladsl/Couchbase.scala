@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.stream.alpakka.couchbase.scaladsl
 import akka.NotUsed
 import akka.dispatch.ExecutionContexts
@@ -17,7 +21,7 @@ object Couchbase {
 }
 
 class Couchbase private (couchbase: Future[CouchbaseSession]) {
-  //TODO: is ExecutionContexts.sameThreadExecutionContext fine or should we pass execution context?
+  //TODO: is it Okay to use ExecutionContexts.sameThreadExecutionContext here?
 
   def mapToFuture[A](f: CouchbaseSession => Future[A]): Future[A] =
     couchbase.value match {
