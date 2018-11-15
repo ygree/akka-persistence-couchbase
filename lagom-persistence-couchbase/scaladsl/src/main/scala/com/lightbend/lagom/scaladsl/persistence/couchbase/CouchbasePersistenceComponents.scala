@@ -50,10 +50,10 @@ trait ReadSideCouchbasePersistenceComponents extends ReadSidePersistenceComponen
     configuration.underlying.getConfig("couchbase-journal")
   )
 
-  lazy val session: CouchbaseSession = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  lazy val session: CouchbaseSession.Holder = CouchbaseSession.Holder(settings.sessionSettings, settings.bucket)
 
   private[lagom] lazy val couchbaseOffsetStore: CouchbaseOffsetStore =
-    new ScaladslCouchbaseOffsetStore(actorSystem, session, readSideConfig)(executionContext)
+    new ScaladslCouchbaseOffsetStore(actorSystem, session, readSideConfig)
 
   lazy val offsetStore: OffsetStore = couchbaseOffsetStore
 

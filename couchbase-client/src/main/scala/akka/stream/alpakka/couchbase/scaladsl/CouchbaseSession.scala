@@ -5,6 +5,7 @@
 package akka.stream.alpakka.couchbase.scaladsl
 
 import akka.annotation.DoNotInherit
+import akka.dispatch.ExecutionContexts
 import akka.stream.alpakka.couchbase.impl.CouchbaseSessionImpl
 import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
 import akka.stream.scaladsl.Source
@@ -16,14 +17,45 @@ import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster, CouchbaseCluster
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Success
 
 object CouchbaseSession {
+
+  class Holder private (couchbase: Future[CouchbaseSession]) {
+    //TODO: is ExecutionContexts.sameThreadExecutionContext fine or should we pass execution context?
+
+    def withCouchbase[A](f: CouchbaseSession => Future[A]): Future[A] =
+      couchbase.value match {
+        case Some(Success(c)) => f(c)
+        case _ => couchbase.flatMap(f)(ExecutionContexts.sameThreadExecutionContext)
+      }
+
+    def withCouchbase[Out](f: CouchbaseSession => Source[Out, NotUsed]): Source[Out, NotUsed] =
+      couchbase.value match {
+        case Some(Success(c)) => f(c)
+        case _ =>
+          Source.fromFuture(couchbase).flatMapConcat(f) //TODO: is there a way to preserve Mat type of f here?
+      }
+
+    def close(): Unit =
+      //leaving it closing behind for now
+      couchbase.foreach(_.close())(ExecutionContexts.sameThreadExecutionContext)
+
+  }
+
+  object Holder {
+    def apply(settings: CouchbaseSessionSettings, bucketName: String): Holder =
+      new Holder(CouchbaseSession.apply(settings, bucketName))
+
+    def apply(bucket: Bucket): Holder =
+      new Holder(Future.successful(CouchbaseSession.apply(bucket)))
+  }
 
   /**
    * Create a session against the given bucket. The couchbase client used to connect will be created and then closed when
    * the session is closed.
    */
-  def apply(settings: CouchbaseSessionSettings, bucketName: String): CouchbaseSession = {
+  def apply(settings: CouchbaseSessionSettings, bucketName: String): Future[CouchbaseSession] = {
     // FIXME here be blocking
     // FIXME make the settings => cluster logic public API so we can reuse it in journal?
     val cluster: Cluster =
@@ -33,7 +65,8 @@ object CouchbaseSession {
       }
     cluster.authenticate(settings.username, settings.password)
     val bucket = cluster.openBucket(bucketName)
-    new CouchbaseSessionImpl(bucket, Some(cluster))
+    //TODO use async cluster
+    Future.successful(new CouchbaseSessionImpl(bucket, Some(cluster)))
   }
 
   /**

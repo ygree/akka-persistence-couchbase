@@ -17,7 +17,7 @@ import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
 
 object TestEntityReadSide {
-  class TestEntityReadSideProcessor(system: ActorSystem, readSide: CouchbaseReadSide, session: CouchbaseSession)
+  class TestEntityReadSideProcessor(system: ActorSystem, readSide: CouchbaseReadSide)
       extends ReadSideProcessor[TestEntity.Evt] {
 
     def buildHandler(): ReadSideHandler[TestEntity.Evt] = {
@@ -53,10 +53,10 @@ object TestEntityReadSide {
 
 }
 
-class TestEntityReadSide(system: ActorSystem, session: CouchbaseSession) {
+class TestEntityReadSide(system: ActorSystem, session: CouchbaseSession.Holder) {
 
   import system.dispatcher
 
   def getAppendCount(entityId: String): Future[Long] =
-    TestEntityReadSide.getCount(session, entityId)
+    session.withCouchbase(s => TestEntityReadSide.getCount(s, entityId))
 }

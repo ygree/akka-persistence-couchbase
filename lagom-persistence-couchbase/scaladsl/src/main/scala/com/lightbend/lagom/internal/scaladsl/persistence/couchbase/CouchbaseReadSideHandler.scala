@@ -21,7 +21,7 @@ import scala.concurrent.{ExecutionContext, Future}
  * Internal API
  */
 private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEvent[Event], Handler](
-    session: CouchbaseSession,
+    session: CouchbaseSession.Holder,
     handlers: Map[Class[_ <: Event], Handler],
     dispatcher: String
 )(implicit ec: ExecutionContext)
@@ -34,7 +34,7 @@ private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEve
   override def handle(): Flow[EventStreamElement[Event], Done, NotUsed] = {
 
     def executeStatements(statements: Seq[CouchbaseAction]): Future[Done] =
-      Future.traverse(statements)(a => a.execute(session, ec)).map(_ => Done)
+      session.withCouchbase(s => Future.traverse(statements)(a => a.execute(s, ec)).map(_ => Done))
 
     Flow[EventStreamElement[Event]]
       .mapAsync(parallelism = 1) { elem =>
@@ -73,7 +73,7 @@ private[couchbase] object CouchbaseAutoReadSideHandler {
  * Internal API
  */
 private[couchbase] final class CouchbaseAutoReadSideHandler[Event <: AggregateEvent[Event]](
-    session: CouchbaseSession,
+    session: CouchbaseSession.Holder,
     offsetStore: CouchbaseOffsetStore,
     handlers: Map[Class[_ <: Event], CouchbaseAutoReadSideHandler.Handler[Event]],
     readProcessorId: String,

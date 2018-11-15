@@ -9,12 +9,10 @@ import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.lightbend.lagom.internal.persistence.ReadSideConfig
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
 
-import scala.concurrent.ExecutionContext
-
 /**
  * Internal API
  */
 private[lagom] final class ScaladslCouchbaseOffsetStore(system: ActorSystem,
-                                                        session: CouchbaseSession,
-                                                        config: ReadSideConfig)(implicit ec: ExecutionContext)
+                                                        session: CouchbaseSession.Holder,
+                                                        config: ReadSideConfig)
     extends CouchbaseOffsetStore(system, config, session)

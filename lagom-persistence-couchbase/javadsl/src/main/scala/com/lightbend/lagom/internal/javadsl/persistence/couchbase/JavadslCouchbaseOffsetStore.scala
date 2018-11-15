@@ -10,13 +10,11 @@ import com.lightbend.lagom.internal.persistence.ReadSideConfig
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
 import javax.inject.{Inject, Singleton}
 
-import scala.concurrent.ExecutionContext
-
 /**
  * Internal API
  */
 @Singleton
 private[lagom] final class JavadslCouchbaseOffsetStore @Inject()(system: ActorSystem,
-                                                                 session: CouchbaseSession,
-                                                                 config: ReadSideConfig)(implicit ec: ExecutionContext)
+                                                                 session: CouchbaseSession.Holder,
+                                                                 config: ReadSideConfig)
     extends CouchbaseOffsetStore(system, config, session)

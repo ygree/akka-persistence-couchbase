@@ -15,7 +15,7 @@ import com.lightbend.lagom.scaladsl.persistence.TestEntity.Evt
 import com.lightbend.lagom.scaladsl.persistence._
 import com.typesafe.config.{Config, ConfigFactory}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 object CouchbaseReadSideSpec {
@@ -27,7 +27,8 @@ class CouchbaseReadSideSpec
     extends CouchbasePersistenceSpec(CouchbaseReadSideSpec.defaultConfig, TestEntitySerializerRegistry)
     with AbstractReadSideSpec
     with CouchbaseBucketSetup {
-  import system.dispatcher
+
+  implicit private val ec: ExecutionContext = system.dispatcher
 
   override protected lazy val persistentEntityRegistry = new CouchbasePersistentEntityRegistry(system)
 
@@ -35,7 +36,7 @@ class CouchbaseReadSideSpec
   private lazy val couchbaseReadSide = new CouchbaseReadSideImpl(system, session, offsetStore)
 
   override def processorFactory(): ReadSideProcessor[Evt] =
-    new TestEntityReadSide.TestEntityReadSideProcessor(system, couchbaseReadSide, session)
+    new TestEntityReadSide.TestEntityReadSideProcessor(system, couchbaseReadSide)
 
   private lazy val readSide = new TestEntityReadSide(system, session)
 

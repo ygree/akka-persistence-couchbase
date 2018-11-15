@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
  * Internal API
  */
 private[lagom] final class CouchbaseReadSideImpl(system: ActorSystem,
-                                                 session: CouchbaseSession,
+                                                 session: CouchbaseSession.Holder,
                                                  offsetStore: CouchbaseOffsetStore)
     extends CouchbaseReadSide {
 

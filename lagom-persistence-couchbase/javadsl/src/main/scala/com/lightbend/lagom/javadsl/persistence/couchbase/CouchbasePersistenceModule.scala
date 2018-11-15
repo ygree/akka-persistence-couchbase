@@ -41,21 +41,18 @@ class CouchbasePersistenceModule extends Module {
     //    bind[CassandraReadSideSettings].toSelf,
     //    bind[CassandraOffsetStore].to[JavadslCassandraOffsetStore],
     bind[OffsetStore].to(bind[JavadslCouchbaseOffsetStore]),
-    bind[CouchbaseSession].toProvider[CouchbaseSessionProvider] //TODO:
+    bind[CouchbaseSession.Holder].toProvider[CouchbaseSessionProvider]
   )
 
 }
 
-private[lagom] class CouchbaseSessionProvider @Inject()(cfg: Config) extends Provider[CouchbaseSession] {
+private[lagom] class CouchbaseSessionProvider @Inject()(cfg: Config) extends Provider[CouchbaseSession.Holder] {
 
   private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(cfg.getConfig("couchbase-journal"))
-  //  private implicit val ec: ExecutionContext = context.dispatcher
 
-  val session = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  lazy val session: CouchbaseSession.Holder = CouchbaseSession.Holder(settings.sessionSettings, settings.bucket)
 
-  override def get(): CouchbaseSession =
-    //TODO:
-    session
+  override def get(): CouchbaseSession.Holder = session
 }
 
 private[lagom] object CouchbasePersistenceModule {
