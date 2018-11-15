@@ -4,8 +4,6 @@
 
 package akka.persistence.couchbase
 
-import java.util.Base64
-
 import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
 import akka.event.Logging
@@ -37,60 +35,6 @@ private[akka] object CouchbaseJournal {
 
   case class TaggedPersistentRepr(pr: PersistentRepr, tags: Set[String])
 
-  def deserialize[T](value: JsonObject,
-                     toSequenceNr: Long,
-                     serialization: Serialization,
-                     extract: (String, String, JsonObject, Serialization) => T): im.Seq[T] = {
-    val persistenceId = value.getString(Fields.PersistenceId)
-    val from: Long = value.getLong(Fields.SequenceFrom)
-    val sequenceTo: Long = value.getLong(Fields.SequenceTo)
-    val localTo: Long = if (sequenceTo > toSequenceNr) toSequenceNr else sequenceTo
-    val events: JsonArray = value.getArray("messages")
-    val writerUuid = value.getString("writer_uuid")
-    require(sequenceTo - from + 1 == events.size())
-    val nrReply = localTo - from
-    (0 to nrReply.asInstanceOf[Int]) map { i =>
-      extract(persistenceId, writerUuid, events.getObject(i), serialization)
-    }
-  }
-
-  def extractEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization): PersistentRepr = {
-    val payload = Serialized.fromJsonObject(serialization, event)
-    val sequenceNr = event.getLong(Fields.SequenceNr)
-    PersistentRepr(payload = payload, sequenceNr = sequenceNr, persistenceId = pid, writerUuid = writerUuid)
-  }
-
-  def extractTaggedEvent(pid: String,
-                         writerUuid: String,
-                         event: JsonObject,
-                         serialization: Serialization): TaggedPersistentRepr = {
-    val serManifest = event.getString(Fields.SerializerManifest)
-    val serId = event.getInt(Fields.SerializerId)
-    val bytes = Base64.getDecoder.decode(event.getString(Fields.Payload))
-    val payload = serialization.deserialize(bytes, serId, serManifest).get // hrmm
-    val sequenceNr = event.getLong(Fields.SequenceNr)
-    val tags: Set[AnyRef] = event.getArray("tags").toList.asScala.toSet
-    CouchbaseJournal.TaggedPersistentRepr(
-      PersistentRepr(payload = payload, sequenceNr = sequenceNr, persistenceId = pid, writerUuid = writerUuid),
-      tags.map(_.toString)
-    )
-  }
-
-  object Fields {
-    val Type = "type"
-
-    val PersistenceId = "persistence_id"
-    val SequenceNr = "sequence_nr"
-    val SequenceFrom = "sequence_from"
-    val SequenceTo = "sequence_to"
-    val Ordering = "ordering"
-    val Timestamp = "timestamp"
-    val Payload = "payload"
-
-    val SerializerManifest = "ser_manifest"
-    val SerializerId = "ser_id"
-  }
-
   private val ExtraSuccessFulUnit: Try[Unit] = Success(())
 
 }
@@ -105,12 +49,14 @@ private[akka] object CouchbaseJournal {
 class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJournal {
 
   import CouchbaseJournal._
+  import CouchbaseSchema.Fields
 
   private implicit val ec: ExecutionContext = context.dispatcher
 
   private val log = Logging(this)
-  private val serialization: Serialization = SerializationExtension(context.system)
-  private implicit val materializer = ActorMaterializer()
+  private implicit val system = context.system
+  private val serialization: Serialization = SerializationExtension(system)
+  private implicit val materializer = ActorMaterializer()(context)
 
   private val settings: CouchbaseJournalSettings = {
     // shared config is one level above the journal specific
@@ -159,63 +105,77 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
   override def asyncWriteMessages(messages: im.Seq[AtomicWrite]): Future[im.Seq[Try[Unit]]] = {
     log.debug("asyncWriteMessages {}", messages)
     require(messages.nonEmpty)
-    val pid = messages.head.persistenceId
-    val docsToInsert: im.Seq[JsonDocument] = messages.map(aw => {
-      var allTags = Set.empty[String]
-      val serialized: im.Seq[JsonObject] = aw.payload.map { msg =>
-        val (event, tags) = msg.payload match {
-          case t: Tagged => (t.payload.asInstanceOf[AnyRef], t.tags)
-          case other => (other.asInstanceOf[AnyRef], Set.empty)
-        }
-        allTags = allTags ++ tags
-        val serialized = Serialized.serialize(serialization, event)
-        serialized
-          .asJson()
-          .put("tags", JsonArray.from(tags.toList.asJava))
-          .put(Fields.SequenceNr, msg.sequenceNr)
+    val docsToInsert: Future[im.Seq[JsonDocument]] =
+      Future.sequence(messages.map(atomicWriteToJsonDoc)).andThen {
+        case Failure(ex) => ex.printStackTrace()
+        case _ =>
       }
 
+    docsToInsert.flatMap(docs => Future.sequence(docs.map(insertJsonDoc)))
+  }
+
+  private def insertJsonDoc(jsonDoc: JsonDocument): Future[Try[Unit]] =
+    couchbase
+      .insert(jsonDoc, settings.writeSettings)
+      .map(json => ExtraSuccessFulUnit)(ExecutionContexts.sameThreadExecutionContext)
+      .recover {
+        // lift the failure to not fail the whole sequence
+        case NonFatal(ex) => Failure(ex)
+      }(ExecutionContexts.sameThreadExecutionContext)
+
+  private def atomicWriteToJsonDoc(write: AtomicWrite): Future[JsonDocument] = {
+    val serializedMessages: Future[Seq[JsonObject]] = Future.sequence(write.payload.map { persistentRepr =>
+      val (event, tags) = persistentRepr.payload match {
+        case t: Tagged => (t.payload.asInstanceOf[AnyRef], t.tags)
+        case other => (other.asInstanceOf[AnyRef], Set.empty[String])
+      }
+      SerializedMessage.serialize(serialization, event).map { message =>
+        CouchbaseSchema
+          .serializedMessageToObject(message)
+          .put(Fields.Tags, JsonArray.from(tags.toList.asJava))
+          .put(Fields.SequenceNr, persistentRepr.sequenceNr)
+      }
+    })
+    serializedMessages.map { messagesJson =>
+      val pid = write.persistenceId
+      // collect all tags for the events and put in the surrounding
+      // object for simple indexing on tags
+      val allTags = write.payload.iterator
+        .map(_.payload)
+        .collect {
+          case t: Tagged => t.tags
+        }
+        .flatten
+        .toSet
       val insert: JsonObject = JsonObject
         .create()
-        .put("type", "journal_message")
+        .put(Fields.Type, CouchbaseSchema.JournalEntryType)
         // assumed all msgs have the same writerUuid
-        .put("writer_uuid", aw.payload.head.writerUuid.toString)
+        .put(Fields.WriterUuid, write.payload.head.writerUuid.toString)
         .put(Fields.PersistenceId, pid)
-        .put(Fields.SequenceFrom, aw.lowestSequenceNr)
-        .put(Fields.SequenceTo, aw.highestSequenceNr)
-        .put("messages", JsonArray.from(serialized.asJava))
-        .put("all_tags", JsonArray.from(allTags.toList.asJava))
+        .put(Fields.SequenceFrom, write.lowestSequenceNr)
+        .put(Fields.SequenceTo, write.highestSequenceNr)
+        .put(Fields.Messages, JsonArray.from(messagesJson.asJava))
+        .put(Fields.AllTags, JsonArray.from(allTags.toList.asJava))
         // FIXME temporary ordering solution #66
         .put(Fields.Ordering, System.currentTimeMillis())
-      JsonDocument.create(s"$pid-${aw.lowestSequenceNr}", insert)
-    })
-
-    val inserts: im.Seq[Future[Try[Unit]]] = docsToInsert.map(
-      doc =>
-        couchbase
-          .insert(doc, settings.writeSettings)
-          .map(json => ExtraSuccessFulUnit)(ExecutionContexts.sameThreadExecutionContext)
-          .recover {
-            // lift the failure to not fail the whole sequence
-            case NonFatal(ex) => Failure(ex)
-          }(ExecutionContexts.sameThreadExecutionContext)
-    )
-    Future.sequence(inserts)
+      JsonDocument.create(s"$pid-${write.lowestSequenceNr}", insert)
+    }(ExecutionContexts.sameThreadExecutionContext)
   }
 
   override def asyncDeleteMessagesTo(persistenceId: String, toSequenceNr: Long): Future[Unit] = {
     log.debug("asyncDeleteMessagesTo {} {}", persistenceId, toSequenceNr)
-    val docId = s"$persistenceId-meta"
-    (if (toSequenceNr == Long.MaxValue) {
-       log.debug("Journal cleanup (Long.MaxValue)")
-       asyncReadHighestSequenceNr(persistenceId, 0).flatMap { highestSeqNr =>
-         val doc = JsonDocument.create(docId, JsonObject.create().put("deleted_to", highestSeqNr))
-         couchbase.upsert(doc, settings.writeSettings)
-       }
-     } else {
-       val doc = JsonDocument.create(docId, JsonObject.create().put("deleted_to", toSequenceNr))
-       couchbase.upsert(doc, settings.writeSettings)
-     }).map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
+    val newMetadataEntry: Future[JsonDocument] =
+      if (toSequenceNr == Long.MaxValue) {
+        log.debug("Journal cleanup (Long.MaxValue)")
+        asyncReadHighestSequenceNr(persistenceId, 0).map { highestSeqNr =>
+          CouchbaseSchema.metadataEntry(persistenceId, highestSeqNr)
+        }
+      } else Future.successful(CouchbaseSchema.metadataEntry(persistenceId, toSequenceNr))
+
+    newMetadataEntry
+      .flatMap(entry => couchbase.upsert(entry, settings.writeSettings))
+      .map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
   override def asyncReplayMessages(persistenceId: String, fromSequenceNr: Long, toSequenceNr: Long, max: Long)(
@@ -225,10 +185,10 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
 
     val deletedTo: Future[Long] =
       couchbase
-        .get(s"$persistenceId-meta", settings.readTimeout)
+        .get(CouchbaseSchema.metadataIdFor(persistenceId), settings.readTimeout)
         .map {
           case Some(jsonDoc) =>
-            val dt = jsonDoc.content().getLong("deleted_to").toLong
+            val dt = jsonDoc.content().getLong(Fields.DeletedTo).toLong
             log.debug("Previously deleted to: {}", dt)
             dt + 1 // start at the next sequence nr
           case None => fromSequenceNr
@@ -250,16 +210,28 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
                                 JsonArray.from(persistenceId, starting: java.lang.Long, toSequenceNr: java.lang.Long))
       val source = couchbase.streamedQuery(query)
 
-      source
-        .runForeach(
+      val complete = source
+        .mapAsync(1)(
           json =>
-            CouchbaseJournal
-              .deserialize(json.getObject(settings.bucket), toSequenceNr, serialization, CouchbaseJournal.extractEvent)
-              .foreach { pr =>
-                recoveryCallback(pr)
-            }
+            CouchbaseSchema
+              .deserializeEvents(json.getObject(settings.bucket),
+                                 toSequenceNr,
+                                 serialization,
+                                 CouchbaseSchema.extractEvent)
         )
+        .mapConcat(identity)
+        .runForeach { pr =>
+          recoveryCallback(pr)
+        }
         .map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
+
+      complete.onComplete {
+        // For debugging while developing
+        case Failure(ex) => system.log.error(ex, "Replay error for [{}]", persistenceId)
+        case _ =>
+      }
+
+      complete
     }
 
     replayFinished
@@ -283,7 +255,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
       .map {
         case Some(jsonObj) =>
           log.debug("sequence nr: {}", jsonObj)
-          jsonObj.getLong("sequence_to")
+          jsonObj.getLong(Fields.SequenceTo)
         case None =>
           0L
       }

@@ -6,13 +6,12 @@ package akka.persistence.couchbase
 
 import akka.NotUsed
 import akka.actor.ExtendedActorSystem
-import akka.persistence.couchbase.CouchbaseJournal.{deserialize, extractTaggedEvent, Fields, TaggedPersistentRepr}
+import akka.persistence.couchbase.CouchbaseSchema.Fields
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
 import akka.serialization.{Serialization, SerializationExtension}
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
-import com.couchbase.client.java.CouchbaseCluster
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
@@ -20,8 +19,6 @@ import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
 import com.typesafe.config.Config
-
-import scala.collection.immutable
 
 object CouchbaseReadJournal {
   final val Identifier = "couchbase-journal.read"
@@ -34,7 +31,7 @@ CREATE INDEX `pi2` ON `akka`((self.`persistenceId`),(self.`sequence_from`))
 
 
  */
-class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPath: String)
+class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath: String)
     extends ReadJournal
     with EventsByPersistenceIdQuery
     with CurrentEventsByPersistenceIdQuery
@@ -43,6 +40,8 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
     with CurrentPersistenceIdsQuery
     with PersistenceIdsQuery {
 
+  private implicit val system = eas
+  private implicit val ec = system.dispatcher
   private val serialization: Serialization = SerializationExtension(system)
 
   private val settings: CouchbaseReadJournalSettings = {
@@ -120,8 +119,8 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
               Some(N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", state.from), queryParams))
           },
           (_, row) =>
-            EventsByPersistenceIdState(row.value().getObject("akka").getLong(Fields.SequenceFrom) + 1,
-                                       row.value().getObject("akka").getLong(Fields.SequenceTo))
+            EventsByPersistenceIdState(row.value().getObject(settings.bucket).getLong(Fields.SequenceFrom) + 1,
+                                       row.value().getObject(settings.bucket).getLong(Fields.SequenceTo))
         )
       )
       .mapMaterializedValue(_ => NotUsed)
@@ -166,7 +165,7 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
             initialOrdering,
             ordering =>
               Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),
-            (_, row) => row.value().getObject("akka").getLong(Fields.Ordering) + 1
+            (_, row) => row.value().getObject(settings.bucket).getLong(Fields.Ordering) + 1
           )
         )
         .mapMaterializedValue(_ => NotUsed),
@@ -175,34 +174,40 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
   }
 
   private def eventsByPersistenceIdSource(in: Source[AsyncN1qlQueryRow, NotUsed]): Source[EventEnvelope, NotUsed] =
-    in.map((row: AsyncN1qlQueryRow) => {
-        val value = row.value().getObject("akka")
-        val deserialized: immutable.Seq[TaggedPersistentRepr] =
-          deserialize(value, Long.MaxValue, serialization, extractTaggedEvent)
-        deserialized.map(
-          tpr =>
-            EventEnvelope(Offset.sequence(tpr.pr.sequenceNr), // FIXME, should this be +1, check inclusivity of offsets
-                          tpr.pr.persistenceId,
-                          tpr.pr.sequenceNr,
-                          tpr.pr.payload)
-        )
-      })
+    in.mapAsync(1) { row: AsyncN1qlQueryRow =>
+        val value = row.value().getObject(settings.bucket)
+        CouchbaseSchema.deserializeEvents(value, Long.MaxValue, serialization, CouchbaseSchema.extractTaggedEvent).map {
+          deserialized =>
+            deserialized.map(
+              tpr =>
+                EventEnvelope(Offset
+                                .sequence(tpr.pr.sequenceNr), // FIXME, should this be +1, check inclusivity of offsets
+                              tpr.pr.persistenceId,
+                              tpr.pr.sequenceNr,
+                              tpr.pr.payload)
+            )
+        }
+      }
       .mapConcat(identity)
 
   private def eventsByTagSource(in: Source[AsyncN1qlQueryRow, NotUsed], tag: String): Source[EventEnvelope, NotUsed] =
-    in.map((row: AsyncN1qlQueryRow) => {
+    in.mapAsync(1) { row: AsyncN1qlQueryRow =>
         val value = row.value().getObject("akka")
-        val deserialized: immutable.Seq[TaggedPersistentRepr] =
-          deserialize(value, Long.MaxValue, serialization, extractTaggedEvent).filter(_.tags.contains(tag))
-        val ordering = value.getLong(Fields.Ordering)
-        deserialized.map(
-          tpr =>
-            EventEnvelope(Offset.sequence(ordering + 1), // set to the next one so resume doesn't get this event back
-                          tpr.pr.persistenceId,
-                          tpr.pr.sequenceNr,
-                          tpr.pr.payload)
-        )
-      })
+        CouchbaseSchema.deserializeEvents(value, Long.MaxValue, serialization, CouchbaseSchema.extractTaggedEvent).map {
+          deserialized =>
+            val ordering = value.getLong(Fields.Ordering)
+            deserialized
+              .filter(_.tags.contains(tag))
+              .map(
+                tpr =>
+                  EventEnvelope(Offset
+                                  .sequence(ordering + 1), // set to the next one so resume doesn't get this event back
+                                tpr.pr.persistenceId,
+                                tpr.pr.sequenceNr,
+                                tpr.pr.payload)
+              )
+        }
+      }
       .mapConcat(identity)
 
   /**
