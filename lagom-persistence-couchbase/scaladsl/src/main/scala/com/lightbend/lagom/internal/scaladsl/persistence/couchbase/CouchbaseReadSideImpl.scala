@@ -6,7 +6,7 @@ package com.lightbend.lagom.internal.scaladsl.persistence.couchbase
 
 import akka.actor.ActorSystem
 import akka.dispatch.MessageDispatcher
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.scaladsl.Couchbase
 import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseAction, CouchbaseOffsetStore}
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
 import com.lightbend.lagom.scaladsl.persistence.couchbase.CouchbaseReadSide
@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
  * Internal API
  */
 private[lagom] final class CouchbaseReadSideImpl(system: ActorSystem,
-                                                 session: CouchbaseSession.Holder,
+                                                 couchbase: Couchbase,
                                                  offsetStore: CouchbaseOffsetStore)
     extends CouchbaseReadSide {
 
@@ -42,6 +42,6 @@ private[lagom] final class CouchbaseReadSideImpl(system: ActorSystem,
       }
 
       override def build(): ReadSideHandler[Event] =
-        new CouchbaseAutoReadSideHandler[Event](session, offsetStore, handlers, eventProcessorId, dispatcher)
+        new CouchbaseAutoReadSideHandler[Event](couchbase, offsetStore, handlers, eventProcessorId, dispatcher)
     }
 }

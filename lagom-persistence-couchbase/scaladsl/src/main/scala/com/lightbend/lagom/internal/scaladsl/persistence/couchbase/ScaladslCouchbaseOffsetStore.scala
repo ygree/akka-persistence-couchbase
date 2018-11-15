@@ -5,7 +5,7 @@
 package com.lightbend.lagom.internal.scaladsl.persistence.couchbase
 
 import akka.actor.ActorSystem
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.scaladsl.Couchbase
 import com.lightbend.lagom.internal.persistence.ReadSideConfig
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
 
@@ -13,6 +13,6 @@ import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
  * Internal API
  */
 private[lagom] final class ScaladslCouchbaseOffsetStore(system: ActorSystem,
-                                                        session: CouchbaseSession.Holder,
+                                                        couchbase: Couchbase,
                                                         config: ReadSideConfig)
-    extends CouchbaseOffsetStore(system, config, session)
+    extends CouchbaseOffsetStore(system, config, couchbase)

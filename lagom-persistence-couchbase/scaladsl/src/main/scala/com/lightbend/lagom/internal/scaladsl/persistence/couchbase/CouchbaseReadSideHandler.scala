@@ -6,7 +6,7 @@ package com.lightbend.lagom.internal.scaladsl.persistence.couchbase
 
 import akka.persistence.query.Offset
 import akka.stream.ActorAttributes
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.scaladsl.Couchbase
 import akka.stream.scaladsl.Flow
 import akka.{Done, NotUsed}
 import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseAction, CouchbaseOffsetDao, CouchbaseOffsetStore}
@@ -21,7 +21,7 @@ import scala.concurrent.{ExecutionContext, Future}
  * Internal API
  */
 private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEvent[Event], Handler](
-    session: CouchbaseSession.Holder,
+    couchbase: Couchbase,
     handlers: Map[Class[_ <: Event], Handler],
     dispatcher: String
 )(implicit ec: ExecutionContext)
@@ -34,7 +34,7 @@ private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEve
   override def handle(): Flow[EventStreamElement[Event], Done, NotUsed] = {
 
     def executeStatements(statements: Seq[CouchbaseAction]): Future[Done] =
-      session.mapToFuture(s => Future.traverse(statements)(a => a.execute(s, ec)).map(_ => Done))
+      couchbase.mapToFuture(session => Future.traverse(statements)(a => a.execute(session, ec)).map(_ => Done))
 
     Flow[EventStreamElement[Event]]
       .mapAsync(parallelism = 1) { elem =>
@@ -73,13 +73,15 @@ private[couchbase] object CouchbaseAutoReadSideHandler {
  * Internal API
  */
 private[couchbase] final class CouchbaseAutoReadSideHandler[Event <: AggregateEvent[Event]](
-    session: CouchbaseSession.Holder,
+    couchbase: Couchbase,
     offsetStore: CouchbaseOffsetStore,
     handlers: Map[Class[_ <: Event], CouchbaseAutoReadSideHandler.Handler[Event]],
     readProcessorId: String,
     dispatcher: String
 )(implicit ec: ExecutionContext)
-    extends CouchbaseReadSideHandler[Event, CouchbaseAutoReadSideHandler.Handler[Event]](session, handlers, dispatcher) {
+    extends CouchbaseReadSideHandler[Event, CouchbaseAutoReadSideHandler.Handler[Event]](couchbase,
+                                                                                         handlers,
+                                                                                         dispatcher) {
 
   import CouchbaseAutoReadSideHandler.Handler
 

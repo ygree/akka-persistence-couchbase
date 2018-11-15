@@ -6,7 +6,7 @@ package akka.persistence.couchbase
 
 import java.util.concurrent.TimeUnit
 
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.scaladsl.Couchbase
 import com.couchbase.client.java.query.N1qlQuery
 import com.couchbase.client.java.{Cluster, CouchbaseCluster}
 import org.scalatest.{BeforeAndAfterAll, Suite}
@@ -16,7 +16,7 @@ import scala.util.Try
 trait CouchbaseBucketSetup extends BeforeAndAfterAll { self: Suite =>
 
   private var cluster: Cluster = _
-  var session: CouchbaseSession.Holder = _
+  var couchbase: Couchbase = _
 
   override protected def beforeAll(): Unit = {
 
@@ -33,13 +33,13 @@ trait CouchbaseBucketSetup extends BeforeAndAfterAll { self: Suite =>
 
     bucket.bucketManager().dropN1qlPrimaryIndex(true)
 
-    session = CouchbaseSession.Holder(bucket)
+    couchbase = Couchbase(bucket)
 
     super.beforeAll()
   }
 
   override protected def afterAll(): Unit = {
-    Try(session.close())
+    Try(couchbase.close())
     Try(cluster.disconnect())
     super.afterAll()
   }

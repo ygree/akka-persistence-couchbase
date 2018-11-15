@@ -6,7 +6,7 @@ package com.lightbend.lagom.scaladsl.persistence.couchbase
 
 import akka.Done
 import akka.actor.ActorSystem
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.scaladsl.{Couchbase, CouchbaseSession}
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseAction
@@ -53,10 +53,10 @@ object TestEntityReadSide {
 
 }
 
-class TestEntityReadSide(system: ActorSystem, session: CouchbaseSession.Holder) {
+class TestEntityReadSide(system: ActorSystem, couchbase: Couchbase) {
 
   import system.dispatcher
 
   def getAppendCount(entityId: String): Future[Long] =
-    session.mapToFuture(s => TestEntityReadSide.getCount(s, entityId))
+    couchbase.mapToFuture(session => TestEntityReadSide.getCount(session, entityId))
 }

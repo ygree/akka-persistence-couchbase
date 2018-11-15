@@ -58,7 +58,7 @@ class CouchbaseSnapshotSpec
         senderProbe.expectMsg("p2-evt-1-done")
 
         pa1 ! SaveSnapshot
-        val snapshotId = senderProbe.expectMsgType[Long]
+        senderProbe.expectMsgType[Long]
 
         senderProbe.watch(pa1)
         pa1 ! PoisonPill

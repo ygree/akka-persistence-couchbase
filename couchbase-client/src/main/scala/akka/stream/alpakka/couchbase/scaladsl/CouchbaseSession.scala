@@ -10,46 +10,15 @@ import akka.stream.alpakka.couchbase.impl.{CouchbaseSessionImpl, RxUtilities}
 import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
+import com.couchbase.client.java._
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query._
-import com.couchbase.client.java._
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
-import scala.util.Success
 
 object CouchbaseSession {
-
-  class Holder private (couchbase: Future[CouchbaseSession]) {
-    //TODO: is ExecutionContexts.sameThreadExecutionContext fine or should we pass execution context?
-
-    def mapToFuture[A](f: CouchbaseSession => Future[A]): Future[A] =
-      couchbase.value match {
-        case Some(Success(c)) => f(c)
-        case _ => couchbase.flatMap(f)(ExecutionContexts.sameThreadExecutionContext)
-      }
-
-    def mapToSource[Out](f: CouchbaseSession => Source[Out, NotUsed]): Source[Out, NotUsed] =
-      couchbase.value match {
-        case Some(Success(c)) => f(c)
-        case _ =>
-          Source.fromFuture(couchbase).flatMapConcat(f) //TODO: is there a way to preserve Mat type of f here?
-      }
-
-    def close(): Unit =
-      //leaving it closing behind for now
-      couchbase.foreach(_.close())(ExecutionContexts.sameThreadExecutionContext)
-
-  }
-
-  object Holder {
-    def apply(settings: CouchbaseSessionSettings, bucketName: String): Holder =
-      new Holder(CouchbaseSession.apply(settings, bucketName))
-
-    def apply(bucket: Bucket): Holder =
-      new Holder(Future.successful(CouchbaseSession.apply(bucket)))
-  }
 
   /**
    * Create a session against the given bucket. The couchbase client used to connect will be created and then closed when

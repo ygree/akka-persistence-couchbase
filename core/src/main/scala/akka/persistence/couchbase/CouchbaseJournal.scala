@@ -12,7 +12,7 @@ import akka.persistence.journal.{AsyncWriteJournal, Tagged}
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializationExtension}
 import akka.stream.ActorMaterializer
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.scaladsl.Couchbase
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
@@ -68,7 +68,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     CouchbaseJournalSettings(sharedConfig)
   }
 
-  private val couchbase = CouchbaseSession.Holder(settings.sessionSettings, settings.bucket)
+  private val couchbase = Couchbase(settings.sessionSettings, settings.bucket)
 
   // TODO how horrific is this query?
   // select persistenceId, sequence_from from akka where akka.persistenceId = "pid1" order by sequence_from desc limit 1

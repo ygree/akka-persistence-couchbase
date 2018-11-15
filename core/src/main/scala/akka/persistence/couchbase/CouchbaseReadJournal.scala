@@ -10,7 +10,7 @@ import akka.persistence.couchbase.CouchbaseSchema.Fields
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
 import akka.serialization.{Serialization, SerializationExtension}
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.scaladsl.Couchbase
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
@@ -51,7 +51,7 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
 
     CouchbaseReadJournalSettings(sharedConfig)
   }
-  private val couchbase = CouchbaseSession.Holder(settings.sessionSettings, settings.bucket)
+  private val couchbase = Couchbase(settings.sessionSettings, settings.bucket)
 
   system.registerOnTermination {
     couchbase.close()
