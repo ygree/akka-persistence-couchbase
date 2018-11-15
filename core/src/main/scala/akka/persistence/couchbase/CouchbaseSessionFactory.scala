@@ -9,7 +9,7 @@ import akka.dispatch.ExecutionContexts
 import akka.stream.alpakka.couchbase.CouchbaseSessionSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
 /**
@@ -18,6 +18,8 @@ import scala.util.{Failure, Success}
 @InternalApi
 object CouchbaseSessionFactory {
 
+  private var session: CouchbaseSession = _
+
   def apply(system: ActorSystem,
             sessionSettings: CouchbaseSessionSettings,
             bucket: String,
@@ -25,16 +27,16 @@ object CouchbaseSessionFactory {
 
     val log = system.log
 
-    val session = CouchbaseSession(sessionSettings, bucket) //TODO use asyncCluster and connect asynchronously
+    synchronized {
+      if (session == null) {
+        session = CouchbaseSession(sessionSettings, bucket) //TODO use asyncCluster and connect asynchronously
+      }
+    }
 
-    import scala.concurrent.duration._
+    if (indexAutoCreate) {
+      val future = session.createIndex("pi2", true, "persistence_id", "sequence_from")
 
-//    if (indexAutoCreate) {
-    val future = session.createIndex("pi2", true, "persistence_id", "sequence_from")
-
-    Await
-      .ready(future, 30.seconds) //FIXME
-      .onComplete {
+      future.onComplete {
         case Success(true) =>
           log.info("Indexes have been created successfully.")
         case Success(false) =>
@@ -43,12 +45,10 @@ object CouchbaseSessionFactory {
           log.error(t, "Couldn't create indexes")
       }(ExecutionContexts.sameThreadExecutionContext)
 
-//      future.map(_ => session)(ExecutionContexts.sameThreadExecutionContext)
-//    } else {
+      return future.map(_ => session)(system.dispatcher)
+    }
 
     Future.successful(session)
-//    }
-
   }
 
 }
