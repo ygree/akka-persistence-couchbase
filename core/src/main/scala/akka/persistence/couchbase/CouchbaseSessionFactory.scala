@@ -16,7 +16,7 @@ import scala.util.{Failure, Success}
  * Internal API
  */
 @InternalApi
-object CouchbaseSessionSingleton {
+object CouchbaseSessionFactory {
   @volatile private var session: CouchbaseSession = _
 
   def apply(system: ActorSystem,
@@ -26,6 +26,7 @@ object CouchbaseSessionSingleton {
 
     val log = system.log
 
+    //TODO: use ActorSystem extension
     if (session == null) {
       synchronized {
         if (session == null) {
