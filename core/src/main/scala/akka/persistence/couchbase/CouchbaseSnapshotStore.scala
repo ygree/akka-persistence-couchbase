@@ -61,10 +61,12 @@ class CouchbaseSnapshotStore(cfg: Config, configPath: String) extends SnapshotSt
       .limit(1)
 
     // FIXME, deal with errors
-    val result: Future[Option[JsonObject]] = couchbase.singleResponseQuery(
-      N1qlQuery.parameterized(query,
-                              JsonArray.from("snapshot", persistenceId),
-                              N1qlParams.build().consistency(ScanConsistency.STATEMENT_PLUS))
+    val result: Future[Option[JsonObject]] = couchbase.flatMap(
+      _.singleResponseQuery(
+        N1qlQuery.parameterized(query,
+                                JsonArray.from("snapshot", persistenceId),
+                                N1qlParams.build().consistency(ScanConsistency.STATEMENT_PLUS))
+      )
     )
 
     result.map {
@@ -91,14 +93,14 @@ class CouchbaseSnapshotStore(cfg: Config, configPath: String) extends SnapshotSt
       .put(Fields.PersistenceId, metadata.persistenceId)
 
     couchbase
-      .upsert(JsonDocument.create(snapshotKey(metadata), toStore))
+      .flatMap(_.upsert(JsonDocument.create(snapshotKey(metadata), toStore)))
       .map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
   def deleteAsync(metadata: SnapshotMetadata): Future[Unit] = {
     val key = snapshotKey(metadata)
     couchbase
-      .remove(key)
+      .flatMap(_.remove(key))
       .recover {
         case _: DocumentDoesNotExistException => ()
       }
@@ -112,7 +114,7 @@ class CouchbaseSnapshotStore(cfg: Config, configPath: String) extends SnapshotSt
                                         JsonArray.from("snapshot", persistenceId),
                                         N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS))
 
-    couchbase.singleResponseQuery(query).map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
+    couchbase.flatMap(_.singleResponseQuery(query)).map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
   private def snapshotFilter(criteria: SnapshotSelectionCriteria): Expression = {

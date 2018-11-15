@@ -6,6 +6,7 @@ package akka.persistence.couchbase
 
 import akka.NotUsed
 import akka.actor.ExtendedActorSystem
+import akka.dispatch.ExecutionContexts
 import akka.persistence.couchbase.CouchbaseJournal.{deserialize, extractTaggedEvent, Fields, TaggedPersistentRepr}
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
@@ -54,7 +55,7 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
     CouchbaseSessionFactory(system, settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
 
   system.registerOnTermination {
-    session.close()
+    session.foreach(_.close())(ExecutionContexts.sameThreadExecutionContext) //TODO: should we block here?
   }
 
   val pageSize: Int = 100 // FIXME from config
@@ -110,7 +111,7 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
           pageSize,
           N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
           params,
-          session.underlying,
+          session.map(_.underlying)(ExecutionContexts.sameThreadExecutionContext),
           EventsByPersistenceIdState(fromSequenceNr, 0),
           state => {
             if (state.to >= toSequenceNr)
@@ -161,7 +162,7 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
             pageSize,
             N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, initialOrdering), queryParams),
             params,
-            session.underlying,
+            session.map(_.underlying)(ExecutionContexts.sameThreadExecutionContext),
             initialOrdering,
             ordering =>
               Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),
@@ -215,7 +216,11 @@ class CouchbaseReadJournal(system: ExtendedActorSystem, config: Config, configPa
     val query = select(distinct(Fields.PersistenceId)).from(settings.bucket).where(x(Fields.PersistenceId).isNotNull)
     val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
 
-    session.streamedQuery(N1qlQuery.simple(query, queryParams)).map(_.getString(Fields.PersistenceId))
+    Source
+      .fromFuture(session)
+      .flatMapConcat(
+        _.streamedQuery(N1qlQuery.simple(query, queryParams)).map(_.getString(Fields.PersistenceId))
+      )
   }
 
   /*

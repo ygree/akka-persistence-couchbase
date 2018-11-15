@@ -15,6 +15,8 @@ import com.couchbase.client.java.query.dsl.clause._
 import com.couchbase.client.java.query.dsl.Expression._
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
+import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.util.Try
 
 trait CouchbaseBucketSetup extends BeforeAndAfterAll { self: Suite =>

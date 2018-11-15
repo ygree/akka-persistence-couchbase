@@ -4,6 +4,7 @@
 
 package akka.persistence.couchbase
 
+import akka.dispatch.ExecutionContexts
 import akka.stream.stage._
 import akka.stream.{Attributes, Outlet, SourceShape}
 import com.couchbase.client.java.AsyncBucket
@@ -12,6 +13,7 @@ import com.couchbase.client.java.query.{AsyncN1qlQueryResult, AsyncN1qlQueryRow,
 import rx.functions.Func1
 import rx.{Observable, Subscriber}
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object N1qlQueryStage {
@@ -36,7 +38,7 @@ class N1qlQueryStage[S](live: Boolean,
                         pageSize: Int,
                         initialQuery: N1qlQuery,
                         namedParams: JsonObject,
-                        bucket: AsyncBucket,
+                        bucket: Future[AsyncBucket],
                         initialState: S,
                         nextQuery: S => Option[N1qlQuery],
                         updateState: (S, AsyncN1qlQueryRow) => S)
@@ -134,14 +136,15 @@ class N1qlQueryStage[S](live: Boolean,
       state = Querying
       // FIXME deal with initial errors
       // FIXME passing a chunk across the async callback seems better than unfolding first?
-      bucket
-        .query(query)
-        .flatMap(N1qlQueryStage.unfoldRows)
-        .subscribe(new Subscriber[AsyncN1qlQueryRow]() {
-          override def onCompleted(): Unit = completeCb.invoke(())
-          override def onError(t: Throwable): Unit = failedCb.invoke(t)
-          override def onNext(row: AsyncN1qlQueryRow): Unit = newRowCb.invoke(row)
-        })
+      bucket.foreach(
+        _.query(query)
+          .flatMap(N1qlQueryStage.unfoldRows)
+          .subscribe(new Subscriber[AsyncN1qlQueryRow]() {
+            override def onCompleted(): Unit = completeCb.invoke(())
+            override def onError(t: Throwable): Unit = failedCb.invoke(t)
+            override def onNext(row: AsyncN1qlQueryRow): Unit = newRowCb.invoke(row)
+          })
+      )(ExecutionContexts.sameThreadExecutionContext)
     }
 
     override def onPull(): Unit = {

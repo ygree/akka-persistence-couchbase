@@ -24,7 +24,7 @@ import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
 import scala.collection.{immutable => im}
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
@@ -152,7 +152,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
       )
 
   override def postStop(): Unit = {
-    couchbase.close()
+    couchbase.foreach(_.close()) //TODO should we block here?
     materializer.shutdown()
   }
 
@@ -193,7 +193,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     val inserts: im.Seq[Future[Try[Unit]]] = docsToInsert.map(
       doc =>
         couchbase
-          .insert(doc, settings.writeSettings)
+          .flatMap(_.insert(doc, settings.writeSettings))
           .map(json => ExtraSuccessFulUnit)(ExecutionContexts.sameThreadExecutionContext)
           .recover {
             // lift the failure to not fail the whole sequence
@@ -210,11 +210,11 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
        log.debug("Journal cleanup (Long.MaxValue)")
        asyncReadHighestSequenceNr(persistenceId, 0).flatMap { highestSeqNr =>
          val doc = JsonDocument.create(docId, JsonObject.create().put("deleted_to", highestSeqNr))
-         couchbase.upsert(doc, settings.writeSettings)
+         couchbase.flatMap(_.upsert(doc, settings.writeSettings))
        }
      } else {
        val doc = JsonDocument.create(docId, JsonObject.create().put("deleted_to", toSequenceNr))
-       couchbase.upsert(doc, settings.writeSettings)
+       couchbase.flatMap(_.upsert(doc, settings.writeSettings))
      }).map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
@@ -225,7 +225,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
 
     val deletedTo: Future[Long] =
       couchbase
-        .get(s"$persistenceId-meta", settings.readTimeout)
+        .flatMap(_.get(s"$persistenceId-meta", settings.readTimeout))
         .map {
           case Some(jsonDoc) =>
             val dt = jsonDoc.content().getLong("deleted_to").toLong
@@ -248,18 +248,18 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
       val query =
         N1qlQuery.parameterized(limitedStatement,
                                 JsonArray.from(persistenceId, starting: java.lang.Long, toSequenceNr: java.lang.Long))
-      val source = couchbase.streamedQuery(query)
+      val source = couchbase.map(_.streamedQuery(query))
 
-      source
-        .runForeach(
+      source.flatMap(
+        _.runForeach(
           json =>
             CouchbaseJournal
               .deserialize(json.getObject(settings.bucket), toSequenceNr, serialization, CouchbaseJournal.extractEvent)
               .foreach { pr =>
                 recoveryCallback(pr)
             }
-        )
-        .map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
+        ).map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
+      )
     }
 
     replayFinished
@@ -278,14 +278,15 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
 
     log.debug("Executing: {}", highestSequenceNrQuery)
 
-    couchbase
-      .singleResponseQuery(highestSequenceNrQuery)
-      .map {
-        case Some(jsonObj) =>
-          log.debug("sequence nr: {}", jsonObj)
-          jsonObj.getLong("sequence_to")
-        case None =>
-          0L
-      }
+    couchbase.flatMap(
+      _.singleResponseQuery(highestSequenceNrQuery)
+        .map {
+          case Some(jsonObj) =>
+            log.debug("sequence nr: {}", jsonObj)
+            jsonObj.getLong("sequence_to")
+          case None =>
+            0L
+        }
+    )
   }
 }
