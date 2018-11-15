@@ -51,10 +51,10 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
 
     CouchbaseReadJournalSettings(sharedConfig)
   }
-  private val session = CouchbaseSession.Holder(settings.sessionSettings, settings.bucket)
+  private val couchbase = CouchbaseSession.Holder(settings.sessionSettings, settings.bucket)
 
   system.registerOnTermination {
-    session.close()
+    couchbase.close()
   }
 
   val pageSize: Int = 100 // FIXME from config
@@ -103,8 +103,8 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
 
     val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
     // TODO do the deleted to query first and start from higher of that and fromSequenceNr
-    val source = session.withCouchbase(
-      couchbase =>
+    val source = couchbase.mapToSource(
+      session =>
         Source
           .fromGraph(
             new N1qlQueryStage[EventsByPersistenceIdState](
@@ -112,7 +112,7 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
               pageSize,
               N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
               params,
-              couchbase.underlying,
+              session.underlying,
               EventsByPersistenceIdState(fromSequenceNr, 0),
               state => {
                 if (state.to >= toSequenceNr)
@@ -156,8 +156,8 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
       .put("limit", pageSize)
     val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
 
-    val sourceOfRows = session.withCouchbase(
-      couchbase =>
+    val sourceOfRows = couchbase.mapToSource(
+      session =>
         Source
           .fromGraph(
             new N1qlQueryStage[Long](
@@ -165,7 +165,7 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
               pageSize,
               N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, initialOrdering), queryParams),
               params,
-              couchbase.underlying,
+              session.underlying,
               initialOrdering,
               ordering =>
                 Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),
@@ -228,7 +228,7 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
     val query = select(distinct(Fields.PersistenceId)).from(settings.bucket).where(x(Fields.PersistenceId).isNotNull)
     val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
 
-    session.withCouchbase(_.streamedQuery(N1qlQuery.simple(query, queryParams)).map(_.getString(Fields.PersistenceId)))
+    couchbase.mapToSource(_.streamedQuery(N1qlQuery.simple(query, queryParams)).map(_.getString(Fields.PersistenceId)))
   }
 
   /*

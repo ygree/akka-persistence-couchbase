@@ -34,7 +34,7 @@ private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEve
   override def handle(): Flow[EventStreamElement[Event], Done, NotUsed] = {
 
     def executeStatements(statements: Seq[CouchbaseAction]): Future[Done] =
-      session.withCouchbase(s => Future.traverse(statements)(a => a.execute(s, ec)).map(_ => Done))
+      session.mapToFuture(s => Future.traverse(statements)(a => a.execute(s, ec)).map(_ => Done))
 
     Flow[EventStreamElement[Event]]
       .mapAsync(parallelism = 1) { elem =>

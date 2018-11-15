@@ -58,5 +58,5 @@ class TestEntityReadSide(system: ActorSystem, session: CouchbaseSession.Holder) 
   import system.dispatcher
 
   def getAppendCount(entityId: String): Future[Long] =
-    session.withCouchbase(s => TestEntityReadSide.getCount(s, entityId))
+    session.mapToFuture(s => TestEntityReadSide.getCount(s, entityId))
 }

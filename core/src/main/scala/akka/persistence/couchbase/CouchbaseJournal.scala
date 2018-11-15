@@ -117,7 +117,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
   }
 
   private def insertJsonDoc(jsonDoc: JsonDocument): Future[Try[Unit]] =
-    couchbase.withCouchbase(
+    couchbase.mapToFuture(
       _.insert(jsonDoc, settings.writeSettings)
         .map(json => ExtraSuccessFulUnit)(ExecutionContexts.sameThreadExecutionContext)
         .recover {
@@ -177,7 +177,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
       } else Future.successful(CouchbaseSchema.metadataEntry(persistenceId, toSequenceNr))
 
     newMetadataEntry
-      .flatMap(entry => couchbase.withCouchbase(_.upsert(entry, settings.writeSettings)))
+      .flatMap(entry => couchbase.mapToFuture(_.upsert(entry, settings.writeSettings)))
       .map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
   }
 
@@ -187,7 +187,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     log.debug("asyncReplayMessages {} {} {} {}", persistenceId, fromSequenceNr, toSequenceNr, max)
 
     val deletedTo: Future[Long] =
-      couchbase.withCouchbase(
+      couchbase.mapToFuture(
         _.get(CouchbaseSchema.metadataIdFor(persistenceId), settings.readTimeout)
           .map {
             case Some(jsonDoc) =>
@@ -213,7 +213,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
         N1qlQuery.parameterized(limitedStatement,
                                 JsonArray.from(persistenceId, starting: java.lang.Long, toSequenceNr: java.lang.Long))
 
-      val source: Source[JsonObject, NotUsed] = couchbase.withCouchbase(_.streamedQuery(query))
+      val source: Source[JsonObject, NotUsed] = couchbase.mapToSource(_.streamedQuery(query))
 
       val complete = source
         .mapAsync(1)(
@@ -225,7 +225,8 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
                                  CouchbaseSchema.extractEvent)
         )
         .mapConcat(identity)
-        .runForeach { pr => recoveryCallback(pr)
+        .runForeach { pr =>
+          recoveryCallback(pr)
         }
         .map(_ => ())(ExecutionContexts.sameThreadExecutionContext)
 
@@ -254,7 +255,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
 
     log.debug("Executing: {}", highestSequenceNrQuery)
 
-    couchbase.withCouchbase(
+    couchbase.mapToFuture(
       _.singleResponseQuery(highestSequenceNrQuery)
         .map {
           case Some(jsonObj) =>

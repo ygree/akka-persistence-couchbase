@@ -35,7 +35,7 @@ private[lagom] abstract class CouchbaseOffsetStore(system: ActorSystem,
   def prepare(eventProcessorId: String, tag: String): Future[CouchbaseOffsetDao] = {
     // FIXME use the right dispatcher
     val offset: Future[Option[JsonDocument]] =
-      session.withCouchbase(_.get(CouchbaseOffset.offsetKey(eventProcessorId, tag)))
+      session.mapToFuture(_.get(CouchbaseOffset.offsetKey(eventProcessorId, tag)))
 
     offset.map {
       case None => new CouchbaseOffsetDao(session, eventProcessorId, tag, NoOffset, system.dispatcher)
@@ -58,7 +58,7 @@ private[lagom] final class CouchbaseOffsetDao(session: CouchbaseSession.Holder,
     extends OffsetDao {
 
   override def saveOffset(offset: Offset): Future[Done] =
-    session.withCouchbase(s => bindSaveOffset(offset).execute(s, ec))
+    session.mapToFuture(s => bindSaveOffset(offset).execute(s, ec))
 
   def bindSaveOffset(offset: Offset): CouchbaseAction =
     offset match {

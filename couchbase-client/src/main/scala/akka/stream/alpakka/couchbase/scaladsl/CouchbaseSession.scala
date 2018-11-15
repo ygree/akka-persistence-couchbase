@@ -6,14 +6,14 @@ package akka.stream.alpakka.couchbase.scaladsl
 
 import akka.annotation.DoNotInherit
 import akka.dispatch.ExecutionContexts
-import akka.stream.alpakka.couchbase.impl.CouchbaseSessionImpl
+import akka.stream.alpakka.couchbase.impl.{CouchbaseSessionImpl, RxUtilities}
 import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query._
-import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster, CouchbaseCluster}
+import com.couchbase.client.java._
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
@@ -24,13 +24,13 @@ object CouchbaseSession {
   class Holder private (couchbase: Future[CouchbaseSession]) {
     //TODO: is ExecutionContexts.sameThreadExecutionContext fine or should we pass execution context?
 
-    def withCouchbase[A](f: CouchbaseSession => Future[A]): Future[A] =
+    def mapToFuture[A](f: CouchbaseSession => Future[A]): Future[A] =
       couchbase.value match {
         case Some(Success(c)) => f(c)
         case _ => couchbase.flatMap(f)(ExecutionContexts.sameThreadExecutionContext)
       }
 
-    def withCouchbase[Out](f: CouchbaseSession => Source[Out, NotUsed]): Source[Out, NotUsed] =
+    def mapToSource[Out](f: CouchbaseSession => Source[Out, NotUsed]): Source[Out, NotUsed] =
       couchbase.value match {
         case Some(Success(c)) => f(c)
         case _ =>
@@ -58,15 +58,21 @@ object CouchbaseSession {
   def apply(settings: CouchbaseSessionSettings, bucketName: String): Future[CouchbaseSession] = {
     // FIXME here be blocking
     // FIXME make the settings => cluster logic public API so we can reuse it in journal?
-    val cluster: Cluster =
+    val asyncCluster: CouchbaseAsyncCluster =
       settings.environment match {
-        case Some(environment) => CouchbaseCluster.create(environment, settings.nodes: _*)
-        case None => CouchbaseCluster.create(settings.nodes: _*)
+        case Some(environment) =>
+          CouchbaseAsyncCluster
+            .create(environment, settings.nodes: _*)
+        case None =>
+          CouchbaseAsyncCluster
+            .create(settings.nodes: _*)
       }
-    cluster.authenticate(settings.username, settings.password)
-    val bucket = cluster.openBucket(bucketName)
-    //TODO use async cluster
-    Future.successful(new CouchbaseSessionImpl(bucket, Some(cluster)))
+
+    asyncCluster.authenticate(settings.username, settings.password)
+
+    RxUtilities
+      .singleObservableToFuture(asyncCluster.openBucket(bucketName), "")
+      .map(bucket => new CouchbaseSessionImpl(bucket, Some(asyncCluster)))(ExecutionContexts.global()) //TODO is it Okay to use global context here
   }
 
   /**
@@ -74,7 +80,7 @@ object CouchbaseSession {
    * that the bucket was created with.
    */
   def apply(bucket: Bucket): CouchbaseSession =
-    new CouchbaseSessionImpl(bucket, None)
+    new CouchbaseSessionImpl(bucket.async(), None)
 
 }
 
@@ -116,18 +122,21 @@ trait CouchbaseSession {
 
   /**
    * Upsert using the default write settings
+   *
    * @return a future that completes when the upsert is done
    */
   def upsert(document: JsonDocument): Future[JsonDocument]
 
   /**
    * FIXME what happens if the id is missing?
+   *
    * @return a future that completes when the upsert is done
    */
   def upsert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument]
 
   /**
    * Remove a document by id using the default write settings.
+   *
    * @return Future that completes when the document has been removed, if there is no such document
    *         the future is failed with a `DocumentDoesNotExistException`
    */
@@ -135,6 +144,7 @@ trait CouchbaseSession {
 
   /**
    * Remove a document by id using the default write settings.
+   *
    * @return Future that completes when the document has been removed, if there is no such document
    *         the future is failed with a `DocumentDoesNotExistException`
    */
@@ -147,6 +157,7 @@ trait CouchbaseSession {
 
   /**
    * Create or increment a counter
+   *
    * @param id What counter document id
    * @param delta Value to increase the counter with if it does exist
    * @param initial Value to start from if the counter does not exist
@@ -156,6 +167,7 @@ trait CouchbaseSession {
 
   /**
    * Create or increment a counter
+   *
    * @param id What counter document id
    * @param delta Value to increase the counter with if it does exist
    * @param initial Value to start from if the counter does not exist
