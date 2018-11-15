@@ -10,7 +10,6 @@ import akka.persistence.couchbase.CouchbaseSchema.Fields
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
 import akka.serialization.{Serialization, SerializationExtension}
-import akka.stream.alpakka.couchbase.scaladsl.Couchbase
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
@@ -24,13 +23,6 @@ object CouchbaseReadJournal {
   final val Identifier = "couchbase-journal.read"
 }
 
-/*
-Required indexes:
-
-CREATE INDEX `pi2` ON `akka`((self.`persistenceId`),(self.`sequence_from`))
-
-
- */
 class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath: String)
     extends ReadJournal
     with EventsByPersistenceIdQuery
@@ -51,7 +43,8 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
 
     CouchbaseReadJournalSettings(sharedConfig)
   }
-  private val couchbase = Couchbase(settings.sessionSettings, settings.bucket)
+
+  private val couchbase = Couchbase(settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
 
   system.registerOnTermination {
     couchbase.close()

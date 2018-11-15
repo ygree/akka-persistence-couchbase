@@ -58,6 +58,8 @@ class PersistentEntityRefSpec
       couchbase-journal.write.replicate-to = none
       couchbase-journal.write.write-timeout = 15s
       couchbase-journal.write.read-timeout = 15s
+
+      couchbase-journal.write.index-autocreate = on
   """).withFallback(CouchbasePersistenceSpec.couchbaseConfig())
 
   private val system: ActorSystem = ActorSystem(

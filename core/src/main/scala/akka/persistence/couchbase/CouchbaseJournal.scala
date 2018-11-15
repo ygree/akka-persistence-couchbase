@@ -12,7 +12,6 @@ import akka.persistence.journal.{AsyncWriteJournal, Tagged}
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializationExtension}
 import akka.stream.ActorMaterializer
-import akka.stream.alpakka.couchbase.scaladsl.Couchbase
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
@@ -43,9 +42,6 @@ private[akka] object CouchbaseJournal {
 
 /**
  * INTERNAL API
- *
- * Need at least this GI:
- * - create index pi2  on akka(akka.persistenceId, akka.sequence_from)
  */
 @InternalApi
 class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJournal {
@@ -68,7 +64,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     CouchbaseJournalSettings(sharedConfig)
   }
 
-  private val couchbase = Couchbase(settings.sessionSettings, settings.bucket)
+  private val couchbase = Couchbase(settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
 
   // TODO how horrific is this query?
   // select persistenceId, sequence_from from akka where akka.persistenceId = "pid1" order by sequence_from desc limit 1
@@ -232,7 +228,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
 
       complete.onComplete {
         // For debugging while developing
-        case Failure(ex) => system.log.error(ex, "Replay error for [{}]", persistenceId)
+        case Failure(ex) => log.error(ex, "Replay error for [{}]", persistenceId)
         case _ =>
       }
 

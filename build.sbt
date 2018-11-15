@@ -117,6 +117,7 @@ lazy val `lagom-persistence-couchbase-core` = (project in file("lagom-persistenc
 
 lazy val `lagom-persistence-couchbase-javadsl` = (project in file("lagom-persistence-couchbase/javadsl"))
   .dependsOn(
+    core % "compile;test->test",
     `lagom-persistence-couchbase-core` % "compile;test->test",
     `copy-of-lagom-persistence-test` % "test->test"
   )
@@ -129,6 +130,7 @@ lazy val `lagom-persistence-couchbase-javadsl` = (project in file("lagom-persist
 
 lazy val `lagom-persistence-couchbase-scaladsl` = (project in file("lagom-persistence-couchbase/scaladsl"))
   .dependsOn(
+    core % "compile;test->test",
     `lagom-persistence-couchbase-core` % "compile;test->test",
     `copy-of-lagom-persistence-test` % "test->test"
   )

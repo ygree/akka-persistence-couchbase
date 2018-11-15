@@ -5,7 +5,7 @@
 package com.lightbend.lagom.internal.scaladsl.persistence.couchbase
 
 import akka.actor.ActorSystem
-import akka.stream.alpakka.couchbase.scaladsl.Couchbase
+import akka.persistence.couchbase.Couchbase
 import com.lightbend.lagom.internal.persistence.ReadSideConfig
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
 

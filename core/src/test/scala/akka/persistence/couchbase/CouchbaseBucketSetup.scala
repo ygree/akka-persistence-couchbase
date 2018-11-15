@@ -6,7 +6,7 @@ package akka.persistence.couchbase
 
 import java.util.concurrent.TimeUnit
 
-import akka.stream.alpakka.couchbase.scaladsl.Couchbase
+import akka.dispatch.ExecutionContexts
 import com.couchbase.client.java.query.N1qlQuery
 import com.couchbase.client.java.{Cluster, CouchbaseCluster}
 import org.scalatest.{BeforeAndAfterAll, Suite}
@@ -33,7 +33,7 @@ trait CouchbaseBucketSetup extends BeforeAndAfterAll { self: Suite =>
 
     bucket.bucketManager().dropN1qlPrimaryIndex(true)
 
-    couchbase = Couchbase(bucket)
+    couchbase = Couchbase(bucket)(ExecutionContexts.sameThreadExecutionContext)
 
     super.beforeAll()
   }

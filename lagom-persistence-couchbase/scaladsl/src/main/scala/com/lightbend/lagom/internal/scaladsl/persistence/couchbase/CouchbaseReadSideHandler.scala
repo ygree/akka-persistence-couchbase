@@ -4,9 +4,9 @@
 
 package com.lightbend.lagom.internal.scaladsl.persistence.couchbase
 
+import akka.persistence.couchbase.Couchbase
 import akka.persistence.query.Offset
 import akka.stream.ActorAttributes
-import akka.stream.alpakka.couchbase.scaladsl.Couchbase
 import akka.stream.scaladsl.Flow
 import akka.{Done, NotUsed}
 import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseAction, CouchbaseOffsetDao, CouchbaseOffsetStore}

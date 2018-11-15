@@ -10,7 +10,6 @@ import akka.persistence.couchbase.CouchbaseSchema.Fields
 import akka.persistence.snapshot.SnapshotStore
 import akka.persistence.{SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria}
 import akka.serialization.SerializationExtension
-import akka.stream.alpakka.couchbase.scaladsl.Couchbase
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
 import com.couchbase.client.java.error.DocumentDoesNotExistException
@@ -39,7 +38,7 @@ class CouchbaseSnapshotStore(cfg: Config, configPath: String) extends SnapshotSt
   private implicit val system: ActorSystem = context.system
   private implicit val ec: ExecutionContext = context.dispatcher
 
-  val couchbase = Couchbase(settings.sessionSettings, settings.bucket)
+  val couchbase = Couchbase(settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
 
   val serialization = SerializationExtension(context.system)
 

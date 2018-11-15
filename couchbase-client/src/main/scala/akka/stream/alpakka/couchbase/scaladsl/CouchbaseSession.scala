@@ -148,4 +148,16 @@ trait CouchbaseSession {
    * Close the session and release all resources it holds. Subsequent calls to other methods will likely fail.
    */
   def close(): Future[Done]
+
+  /**
+   * Create a secondary index for the current bucket.
+   *
+   * @param indexName the name of the index.
+   * @param ignoreIfExist if a secondary index already exists with that name, an exception will be thrown unless this
+   *                      is set to true.
+   * @param fields the JSON fields to index.
+   * @return an {@link scala.concurrent.Future} of true if the index was effectively created, false
+   *      if the index existed and ignoreIfExist is true.
+   */
+  def createIndex(indexName: String, ignoreIfExist: Boolean, fields: String*): Future[Boolean]
 }

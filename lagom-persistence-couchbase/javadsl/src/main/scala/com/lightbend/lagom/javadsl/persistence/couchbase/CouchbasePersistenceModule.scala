@@ -7,8 +7,7 @@ package com.lightbend.lagom.javadsl.persistence.couchbase
 import java.net.URI
 
 import akka.actor.ActorSystem
-import akka.persistence.couchbase.CouchbaseJournalSettings
-import akka.stream.alpakka.couchbase.scaladsl.Couchbase
+import akka.persistence.couchbase.{Couchbase, CouchbaseJournalSettings}
 import com.google.inject.Provider
 import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{
   CouchbasePersistentEntityRegistry,
@@ -46,11 +45,12 @@ class CouchbasePersistenceModule extends Module {
 
 }
 
-private[lagom] class CouchbaseProvider @Inject()(cfg: Config) extends Provider[Couchbase] {
+private[lagom] class CouchbaseProvider @Inject()(system: ActorSystem, cfg: Config) extends Provider[Couchbase] {
 
   private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(cfg.getConfig("couchbase-journal"))
 
-  lazy val couchbase: Couchbase = Couchbase(settings.sessionSettings, settings.bucket)
+  private lazy val couchbase =
+    Couchbase(settings.sessionSettings, settings.bucket, settings.indexAutoCreate)(system.dispatcher)
 
   override def get(): Couchbase = couchbase
 }
