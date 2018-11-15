@@ -37,7 +37,7 @@ class CouchbaseSnapshotStore(cfg: Config, configPath: String) extends SnapshotSt
   private implicit val ec: ExecutionContext = context.dispatcher
 
   val couchbase =
-    CouchbaseSessionFactory(context.system, settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
+    CouchbaseSessionSingleton(context.system, settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
 
   val serialization = SerializationExtension(context.system)
 
