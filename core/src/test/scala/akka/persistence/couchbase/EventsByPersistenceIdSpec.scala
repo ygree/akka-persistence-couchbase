@@ -46,6 +46,7 @@ class EventsByPersistenceIdSpec
   }
 
   "Couchbase query EventsByPersistenceId" must {
+
     "find existing events" in {
       setup("a", 3)
 

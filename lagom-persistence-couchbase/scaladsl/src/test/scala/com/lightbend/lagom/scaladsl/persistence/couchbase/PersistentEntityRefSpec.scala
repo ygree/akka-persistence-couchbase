@@ -62,7 +62,7 @@ class PersistentEntityRefSpec
       couchbase-journal.write.index-autocreate = on
   """).withFallback(CouchbasePersistenceSpec.couchbaseConfig())
 
-  private val system: ActorSystem = ActorSystem(
+  protected val system: ActorSystem = ActorSystem(
     "PersistentEntityRefSpec",
     ActorSystemSetup(BootstrapSetup(config), JsonSerializerRegistry.serializationSetupFor(TestEntitySerializerRegistry))
   )

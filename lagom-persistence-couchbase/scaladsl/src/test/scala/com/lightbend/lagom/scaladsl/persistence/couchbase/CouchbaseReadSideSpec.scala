@@ -30,13 +30,13 @@ class CouchbaseReadSideSpec
 
   override protected lazy val persistentEntityRegistry = new CouchbasePersistentEntityRegistry(system)
 
-  private lazy val offsetStore = new ScaladslCouchbaseOffsetStore(system, couchbase, ReadSideConfig())
-  private lazy val couchbaseReadSide = new CouchbaseReadSideImpl(system, couchbase, offsetStore)
+  private lazy val offsetStore = new ScaladslCouchbaseOffsetStore(system, couchbaseSession, ReadSideConfig())
+  private lazy val couchbaseReadSide = new CouchbaseReadSideImpl(system, couchbaseSession, offsetStore)
 
   override def processorFactory(): ReadSideProcessor[Evt] =
     new TestEntityReadSide.TestEntityReadSideProcessor(system, couchbaseReadSide)
 
-  private lazy val readSide = new TestEntityReadSide(system, couchbase)
+  private lazy val readSide = new TestEntityReadSide(system, couchbaseSession)
 
   override def getAppendCount(id: String): Future[Long] = readSide.getAppendCount(id)
 

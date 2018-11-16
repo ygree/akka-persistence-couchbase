@@ -4,7 +4,9 @@
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
-import akka.persistence.couchbase.{Couchbase, CouchbaseJournalSettings}
+import akka.persistence.couchbase.CouchbaseJournalSettings
+import akka.stream.alpakka.couchbase.scaladsl
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
 import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{
   CouchbasePersistentEntityRegistry,
@@ -19,6 +21,9 @@ import com.lightbend.lagom.scaladsl.persistence.{
   WriteSidePersistenceComponents
 }
 import com.lightbend.lagom.spi.persistence.OffsetStore
+
+import scala.concurrent.duration._
+import scala.concurrent.Await
 
 /**
  * Persistence Couchbase components (for compile-time injection).
@@ -49,8 +54,11 @@ trait ReadSideCouchbasePersistenceComponents extends ReadSidePersistenceComponen
     configuration.underlying.getConfig("couchbase-journal")
   )
 
-  lazy val couchbase: Couchbase =
-    Couchbase(settings.sessionSettings, settings.bucket, settings.indexAutoCreate)(actorSystem.dispatcher)
+  // FIXME is there a way to have async component creation in lagom instead of letting every component know that the thing is async?
+  // if not we should pass Future[CouchbaseSession] around and let the use sites mix in AsyncCouchbaseSession - but if we use
+  // that from Lagom it needs to be made public API
+  lazy val couchbase: CouchbaseSession =
+    Await.result(scaladsl.CouchbaseSession(settings.sessionSettings, settings.bucket), 30.seconds)
 
   private[lagom] lazy val couchbaseOffsetStore: CouchbaseOffsetStore =
     new ScaladslCouchbaseOffsetStore(actorSystem, couchbase, readSideConfig)

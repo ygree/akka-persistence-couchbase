@@ -1,4 +1,4 @@
-FROM couchbase/server:5.5.1
+FROM couchbase:community-5.1.1
 
 COPY /configure.sh /
 

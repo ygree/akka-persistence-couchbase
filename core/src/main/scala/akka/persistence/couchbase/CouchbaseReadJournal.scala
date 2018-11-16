@@ -6,10 +6,13 @@ package akka.persistence.couchbase
 
 import akka.NotUsed
 import akka.actor.ExtendedActorSystem
+import akka.dispatch.ExecutionContexts
+import akka.event.Logging
 import akka.persistence.couchbase.CouchbaseSchema.Fields
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
 import akka.serialization.{Serialization, SerializationExtension}
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
@@ -19,21 +22,27 @@ import com.couchbase.client.java.query.dsl.Expression._
 import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
 import com.typesafe.config.Config
 
+import scala.concurrent.Future
+
 object CouchbaseReadJournal {
   final val Identifier = "couchbase-journal.read"
 }
 
 class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath: String)
     extends ReadJournal
+    with AsyncCouchbaseSession
     with EventsByPersistenceIdQuery
     with CurrentEventsByPersistenceIdQuery
     with EventsByTagQuery
     with CurrentEventsByTagQuery
     with CurrentPersistenceIdsQuery
-    with PersistenceIdsQuery {
+    // TODO actually implement:    with PersistenceIdsQuery
+    {
 
   private implicit val system = eas
-  private implicit val ec = system.dispatcher
+  private val log = Logging(system, configPath)
+
+  protected implicit val executionContext = system.dispatcher
   private val serialization: Serialization = SerializationExtension(system)
 
   private val settings: CouchbaseReadJournalSettings = {
@@ -44,10 +53,13 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
     CouchbaseReadJournalSettings(sharedConfig)
   }
 
-  private val couchbase = Couchbase(settings.sessionSettings, settings.bucket, settings.indexAutoCreate)
+  protected val asyncSession: Future[CouchbaseSession] = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  asyncSession.failed.foreach { ex =>
+    log.error(ex, "Failed to connect to couchbase")
+  }
 
   system.registerOnTermination {
-    couchbase.close()
+    closeCouchbaseSession()
   }
 
   val pageSize: Int = 100 // FIXME from config
@@ -86,18 +98,17 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
   private def internalEventsByPersistenceId(live: Boolean,
                                             persistenceId: String,
                                             fromSequenceNr: Long,
-                                            toSequenceNr: Long): Source[EventEnvelope, NotUsed] = {
+                                            toSequenceNr: Long): Source[EventEnvelope, NotUsed] =
+    sourceWithCouchbaseSession { session =>
+      val params: JsonObject = JsonObject
+        .create()
+        .put("pid", persistenceId)
+        .put("to", toSequenceNr)
+        .put("limit", pageSize)
 
-    val params: JsonObject = JsonObject
-      .create()
-      .put("pid", persistenceId)
-      .put("to", toSequenceNr)
-      .put("limit", pageSize)
-
-    val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
-    // TODO do the deleted to query first and start from higher of that and fromSequenceNr
-    val source = couchbase.mapToSource(
-      session =>
+      val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+      // TODO do the deleted to query first and start from higher of that and fromSequenceNr
+      val source =
         Source
           .fromGraph(
             new N1qlQueryStage[EventsByPersistenceIdState](
@@ -119,10 +130,9 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
             )
           )
           .mapMaterializedValue(_ => NotUsed)
-    )
 
-    eventsByPersistenceIdSource(source)
-  }
+      eventsByPersistenceIdSource(source)
+    }
 
   /*
   Messages persisted together with PersistAll have the same Offset
@@ -136,21 +146,23 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
   override def currentEventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] =
     internalEventsByTag(live = false, tag, offset)
 
-  private def internalEventsByTag(live: Boolean, tag: String, offset: Offset): Source[EventEnvelope, NotUsed] = {
-    val initialOrdering: Long = offset match {
-      case NoOffset => 0L
-      case Sequence(o) => o
-      case TimeBasedUUID(_) => throw new IllegalArgumentException("Couchbase Journal does not support Timeuuid offsets")
-    }
+  private def internalEventsByTag(live: Boolean, tag: String, offset: Offset): Source[EventEnvelope, NotUsed] =
+    sourceWithCouchbaseSession { session =>
+      log.debug("events by tag: live {}, tag: {}, offset: {}", live, tag, offset)
+      val initialOrdering: Long = offset match {
+        case NoOffset => 0L
+        case Sequence(o) => o
+        case TimeBasedUUID(_) =>
+          throw new IllegalArgumentException("Couchbase Journal does not support Timeuuid offsets")
+      }
 
-    val params: JsonObject = JsonObject
-      .create()
-      .put("tag", tag)
-      .put("limit", pageSize)
-    val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+      val params: JsonObject = JsonObject
+        .create()
+        .put("tag", tag)
+        .put("limit", pageSize)
+      val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
 
-    val sourceOfRows = couchbase.mapToSource(
-      session =>
+      val sourceOfRows =
         Source
           .fromGraph(
             new N1qlQueryStage[Long](
@@ -166,12 +178,12 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
             )
           )
           .mapMaterializedValue(_ => NotUsed)
-    )
-    eventsByTagSource(
-      sourceOfRows,
-      tag
-    )
-  }
+
+      eventsByTagSource(
+        sourceOfRows,
+        tag
+      )
+    }
 
   private def eventsByPersistenceIdSource(in: Source[AsyncN1qlQueryRow, NotUsed]): Source[EventEnvelope, NotUsed] =
     in.mapAsync(1) { row: AsyncN1qlQueryRow =>
@@ -192,7 +204,7 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
 
   private def eventsByTagSource(in: Source[AsyncN1qlQueryRow, NotUsed], tag: String): Source[EventEnvelope, NotUsed] =
     in.mapAsync(1) { row: AsyncN1qlQueryRow =>
-        val value = row.value().getObject("akka")
+        val value = row.value().getObject(settings.bucket)
         CouchbaseSchema.deserializeEvents(value, Long.MaxValue, serialization, CouchbaseSchema.extractTaggedEvent).map {
           deserialized =>
             val ordering = value.getLong(Fields.Ordering)
@@ -213,15 +225,14 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
   /**
    * select  distinct persistenceId from akka where persistenceId is not null
    */
-  override def currentPersistenceIds(): Source[String, NotUsed] = {
-
+  override def currentPersistenceIds(): Source[String, NotUsed] = sourceWithCouchbaseSession { session =>
     // this type works on the current queries we'd need to create a stage
     // to do the live queries
     // this can fail as it relies on async updates to the index.
     val query = select(distinct(Fields.PersistenceId)).from(settings.bucket).where(x(Fields.PersistenceId).isNotNull)
     val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
 
-    couchbase.mapToSource(_.streamedQuery(N1qlQuery.simple(query, queryParams)).map(_.getString(Fields.PersistenceId)))
+    session.streamedQuery(N1qlQuery.simple(query, queryParams)).map(_.getString(Fields.PersistenceId))
   }
 
   /*
@@ -300,6 +311,6 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
 
 
    */
-  override def persistenceIds(): Source[String, NotUsed] =
-    ???
+  // override def persistenceIds(): Source[String, NotUsed] =
+  //    ???
 }

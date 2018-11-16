@@ -12,6 +12,7 @@ import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
+import com.couchbase.client.java.bucket.AsyncBucketManager
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
@@ -107,7 +108,6 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: AsyncBucket, cl
     if (!asyncBucket.isClosed) {
       singleObservableToFuture(asyncBucket.close(), "close")
         .flatMap { _ =>
-          // FIXME blocking on global ec right now
           cluster match {
             case Some(cluster) =>
               singleObservableToFuture(cluster.disconnect(), "close").map(_ => Done)(ExecutionContexts.global())
@@ -120,22 +120,17 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: AsyncBucket, cl
 
   override def toString: String = s"CouchbaseSession(${asyncBucket.name()})"
 
-  override def createIndex(indexName: String, ignoreIfExist: Boolean, fields: String*): Future[Boolean] = {
-    val result: Observable[Boolean] = asyncBucket
-      .bucketManager()
-      .flatMap(
-        func1Observable(_.createN1qlIndex(indexName, ignoreIfExist, false, fields: _*))
-      )
-      .map(func1(Boolean.unbox))
-    RxUtilities.singleObservableToFuture(result, s"Create index: $indexName")
-  }
+  override def createIndex(indexName: String, ignoreIfExist: Boolean, fields: AnyRef*): Future[Boolean] =
+    singleObservableToFuture(
+      asyncBucket
+        .bucketManager()
+        .flatMap(
+          func1Observable[AsyncBucketManager, Boolean](
+            _.createN1qlIndex(indexName, ignoreIfExist, false, fields: _*)
+              .map(func1(Boolean.unbox))
+          )
+        ),
+      s"Create index: $indexName"
+    )
 
-  private def func1Observable[T, R](fun: T => Observable[R]) =
-    new Func1[T, Observable[R]]() {
-      override def call(b: T): Observable[R] = fun(b)
-    }
-  private def func1[T, R](fun: T => R) =
-    new Func1[T, R]() {
-      override def call(b: T): R = fun(b)
-    }
 }

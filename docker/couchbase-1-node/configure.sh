@@ -50,8 +50,9 @@ log "$(date +"%T") Waiting ........."
 sleep 20 #TODO: how to check if it's ready to process N1QL queries
 
 # Create indexes
-echo "$(date +"%T") Create bucket indices ........."
+log "Create bucket indices ........."
 cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`pi2\` ON \`akka\`((self.\`persistence_id\`),(self.\`sequence_from\`));"
 cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`tags\` ON \`akka\`((all (\`all_tags\`)),\`ordering\`);"
+
 
 fg 1

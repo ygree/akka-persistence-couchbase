@@ -59,4 +59,13 @@ private[couchbase] object RxUtilities {
     p.future
   }
 
+  def func1Observable[T, R](fun: T => Observable[R]) =
+    new Func1[T, Observable[R]]() {
+      override def call(b: T): Observable[R] = fun(b)
+    }
+  def func1[T, R](fun: T => R) =
+    new Func1[T, R]() {
+      override def call(b: T): R = fun(b)
+    }
+
 }

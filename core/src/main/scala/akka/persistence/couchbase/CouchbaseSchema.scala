@@ -6,6 +6,7 @@ package akka.persistence.couchbase
 
 import java.util.Base64
 
+import akka.Done
 import akka.actor.{ActorSystem, ExtendedActorSystem}
 import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
@@ -16,6 +17,8 @@ import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.util.OptionVal
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
+import com.couchbase.client.java.query.dsl.Expression._
+import com.couchbase.client.java.query.Select.select
 
 import scala.collection.immutable
 import scala.collection.JavaConverters._
@@ -178,13 +181,43 @@ private[akka] final object CouchbaseSchema {
       )
     }
 
+  // NOTE: These aren't actually used, since it seems close to impossible to guarantee the index is ready/done
+  // but let's keep them around for now anyway and potentially move them into a testing utility at some point
+
   /**
-   * Creates `pi2` index
+   * Creates the indexes that the journal needs for replay
    *
    * @return true if the index is already existed, otherwise false
    */
-  def createPi2Index(session: CouchbaseSession): Future[Boolean] =
-    session.createIndex("pi2", true, Fields.PersistenceId, Fields.SequenceFrom)
+  def createRequiredWriteJournalIndexes(session: CouchbaseSession)(implicit ec: ExecutionContext): Future[Done] =
+    // CREATE INDEX `pi` ON `akka`(`persistence_id`,`sequence_from`)
+    session
+      .createIndex("pi", true, Fields.PersistenceId, Fields.SequenceFrom)
+      .flatMap { creating =>
+        if (creating) waitForIndexesToBeOnline(session)
+        else Future.successful(Done)
+      }
+
+  def createRequiredReadJournalIndexes(session: CouchbaseSession)(implicit ec: ExecutionContext): Future[Done] =
+    createRequiredWriteJournalIndexes(session)
+      .flatMap { _ =>
+        // `tags` ON `akka`((all (`all_tags`)),`ordering`);
+        session.createIndex("tags", true, x(s"all (`${Fields.AllTags}`)"), Fields.Ordering)
+      }
+      .flatMap { creating =>
+        if (creating) waitForIndexesToBeOnline(session)
+        else Future.successful(Done)
+      }
+
+  private def waitForIndexesToBeOnline(session: CouchbaseSession)(implicit ec: ExecutionContext): Future[Done] =
+    session
+      .singleResponseQuery(select("*").from("system:indexes").where(x("status").ne(x("online"))))
+      .flatMap {
+        case Some(idx) =>
+          println("index not ready")
+          waitForIndexesToBeOnline(session)
+        case None => Future.successful(Done)
+      }
 }
 
 /**

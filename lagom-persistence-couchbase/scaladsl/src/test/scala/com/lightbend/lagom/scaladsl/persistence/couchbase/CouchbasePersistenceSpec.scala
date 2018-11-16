@@ -28,6 +28,8 @@ object CouchbasePersistenceSpec {
       |    password = "admin1"
       |  }
       |  write.bucket = "akka"
+      |  write.index-autocreate=on
+      |  read.index-autocreate=on
       |  snapshot.bucket = "akka"
       |}
     """.stripMargin)
