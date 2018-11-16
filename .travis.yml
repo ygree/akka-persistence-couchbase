@@ -47,6 +47,9 @@ jobs:
         - PRE_CMD="docker-compose -f docker/couchbase-1-node/docker-compose.yml up -d couchbase"
         - CMD=lagom-persistence-couchbase-scaladsl/test
 
+    - stage: publish
+      script: sbt +publish
+
 stages:
   # runs on master commits and PRs
   - name: check
@@ -55,6 +58,10 @@ stages:
   # runs on main repo master commits and version-tagged commits
   - name: whitesource
     if: repo = akka/akka-persistence-couchbase AND ( ( branch = master AND type = push ) OR tag =~ ^v )
+
+  # runs on main repo master commits and version-tagged commits
+  - name: publish
+    if: repo = akka/akka-persistence-couchbase AND tag =~ ^v
 
 after_failure:
   - docker-compose -f docker/couchbase-1-node/docker-compose.yml logs
@@ -73,3 +80,7 @@ env:
   global:
     # encrypt with: travis encrypt WHITESOURCE_PASSWORD=...
     - secure: "HZY00jZS2NeNQm4zXLHnHTCwcWuXkDw/rXX1SSFvleDTQh1Hj/zAkC3CiEl2zmA8+bV6Cu+dBrOeK0gjYgmYNjiPdNkq4J8w34in6ebxZJfRz4FriVAniZHDXU86VupHPI4MvfKpfyeyQyr16jrMwm+vDP3Piuqzt//1M6056iTSHf0x0rqcmH8a+jiBAgk71/PUCoFdfjtE++niVF0iMKI6WMIA7BBpEW9bCjJ6xoqFZCpPv4blPLbxJGLAwWIycK8m1Me7caeTDrQC9q3vTBlrNEuZSChcSxc/K6D8xexMGl36wNpovNegpU9QobFlbcNNuTgfdsthil1zETTRNkjVjUxhbNalfuwyJMyTN5DT6e7b0n1hbZZ/LW/22X4iCK4DZ6sEmLSjuw/jdspXtSo0acgQVXDBJ0tWkBDnhpjbxR83Q7TUoIQww2tByrZs9kcYM/A9Csukl/Te8B4ICeWIxwEHePzI54JBURF1rBVnOjxM1C0Efp+tlA28y93ywKJPiUCAen2DLNop+WJuYWGSiiKRpOy/Bqdf3vkgmekObGNSJZeUYaW/nXZOF3a1RIc050L0VboJR+emDj+HP7KHK1h8zpezFmH9kIJ/Y4SX4Zq1sVtJGwrmzpsmorBEZQIRjON46469dQMu/P9VdUwGuT/E1LcBJyhO7/7ssPQ="
+    # encrypt with: travis encrypt BINTRAY_USER=...
+    - secure: "r/KxfbsPP7jgw90gtB7wPRdZ0cy8v+0+bek7KSr6btG0PfEVlXXPbhrpXQLUIIXse2gyHreCj2heAmSKPzZhR51/SedMKTFmC9WtNlOqZQsDDGXhWN3/fZSEegitoYsjP4GHA8DDb4klqbXKPEgtISxlebmKfnItW6eniNbNBpTCX7rLBt0unB8SgSpEsy8SeQRyUDf/2MG+cc4scp1vMj8A3iS1ucJI5xPegNJO9xqzHxBZ3TD6r6fIA8pZdNIYLiMBIYR7fju/6afq9kN3buGbNwrk1L+b5Kj8D0TuCwUFKK8r66mHZ7oTUq1hLHHPMtrDmDZQu/e7UroFcux/MyxIkDT32h/3L7BGbVGDdsEX8SCnuPosxn5SQmdgNdrkvAhS7hj8UetxeacnwxGPsI1K+qJ/TNmiDESzXLAwd4a3xnCxveE8g9CnYvZXMoo9bCjcDQK8G5irIIUqOR9CKr4Q5cIdGhlighei1d5KNsZIKGRqB30T5SAvqPFXFGfuuHK7wvXO6P9KoMMghspcoye6FrnYxBteX02d3n6z95wMXAO55GscXxQYEUn1yKEScJLWQOtKGvItLUmW5NbNS/PgM52JnKwN88sU0t2/3hJB2DB2MC1BnA6Wn6w62ChK39B65dxYufw7aaDL6f7pvurjOEyectX6V08uS/8SAak="
+    # encrypt with: travis encrypt BINTRAY_PASS=...
+    -  secure: "MKFv2AAOhY4l7NCZY7Wa2OCiM8eL7LKpCRbF+K96YV3F+lHNCQIwTrYY8B9eprI/WbS+s6KszU8hVIdaxVxATK+k7DRYAG/54NkBVMx2wPEBupMovdvtEiUmFXIacAH6qY3lv0JeTvCu1tq1G/EEdNEgl51T0wjstcJWQEzqnwUOc/GytPsN0vM79lntNAR5PZ67HTDwW30i/xgsUHU1jYqTVFFZLXoAjkxVJ+Yub+lN2+lFHb2VsG971SQ8GO2bUANYlSelr6cF7k7B3J0au5lueHDDdOGUhsDSrGVmjZq5Ph0KU97AhvuyMHNdfjvwBdVR1i/lOl4f3rSjdxpgnUFCLbaQIj3kZ5vSOHY4dDTbYzKvj1fgf9GRB5g1t/TnQZEkziTyvs/BQklmAV0oM6KzUXHVUtvp6IEiqcko5aeye94naX/YCmZuMpiWCiAgAfqP+DTpufA3yMSWIZOsUF8pi+7tnlVcAiDvh6UOygRPx5jONtz5KBp9FD9ISU4yKyPdILHTtZd1BnuD+/r7AoJTux3qu5ukShF+8PFXncd4HooTTnw3euH2LFt8RYmqQp01DOBj2O0Fl+OjXJWvFRSKjAdLRkXroOEHR8HPbBq9ow0TVOtE7nqvajoymEAx77N3omcA27kOXHQL1uxnLZxIckpHRK4pp74fSiyPins="

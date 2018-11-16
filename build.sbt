@@ -1,27 +1,38 @@
 import sbt.Keys.{name, publishArtifact}
 
-crossScalaVersions := Seq("2.12.6", "2.11.12")
-
 def common: Seq[Setting[_]] = Seq(
   organization := "com.lightbend.akka",
   organizationName := "Lightbend Inc.",
+  homepage := Some(url("https://github.com/akka/akka-persistence-couchbase")),
+  scmInfo := Some(
+    ScmInfo(url("https://github.com/akka/akka-persistence-couchbase"),
+            "https://github.com/akka/akka-persistence-couchbase.git")
+  ),
   startYear := Some(2018),
+  developers += Developer("contributors",
+                          "Contributors",
+                          "https://gitter.im/akka/dev",
+                          url("https://github.com/akka/akka-persistence-couchbase/graphs/contributors")),
   licenses := Seq(("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))),
-  crossScalaVersions := Seq("2.11.12", "2.12.7"),
+  crossScalaVersions := Seq("2.12.7", "2.11.12"),
   scalaVersion := crossScalaVersions.value.last,
   crossVersion := CrossVersion.binary,
   scalafmtOnCompile := true,
   scalacOptions ++= Seq(
     "-encoding",
-    "UTF-8",
+    "UTF-8", // yes, this is 2 args
     "-feature",
     "-unchecked",
     "-deprecation",
     "-Xlint",
     "-Yno-adapted-args",
     "-Ywarn-dead-code",
+    "-Ywarn-numeric-widen",
     "-Xfuture"
   ),
+  bintrayOrganization := Some("akka"),
+  bintrayPackage := "akka-persistence-couchbase",
+  bintrayRepository := (if (isSnapshot.value) "snapshots" else "maven"),
   // Setting javac options in common allows IntelliJ IDEA to import them automatically
   javacOptions in compile ++= Seq(
     "-encoding",
@@ -55,7 +66,7 @@ lazy val root = (project in file("."))
     name := "akka-persistence-couchbase-root",
     publishArtifact := false,
     publishTo := Some(Resolver.file("Unused transient repository", file("target/unusedrepo"))),
-    publish := {}
+    skip in publish := true
   )
   .aggregate((Seq(couchbaseClient, core) ++ lagomModules).map(Project.projectToRef): _*)
 
@@ -102,7 +113,7 @@ lazy val `copy-of-lagom-persistence-test` =
     .settings(
       // This modules copy-pasted preserve it as is
       scalafmtOnCompile := false,
-      publishArtifact := false,
+      skip in publish := true,
       libraryDependencies := Dependencies.`copy-of-lagom-persistence-test`
     )
 
