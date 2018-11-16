@@ -12,7 +12,8 @@ import scala.concurrent.duration._
 final class CouchbaseJournalSettings private (val sessionSettings: CouchbaseSessionSettings,
                                               val bucket: String,
                                               val writeSettings: CouchbaseWriteSettings,
-                                              val readTimeout: FiniteDuration)
+                                              val readTimeout: FiniteDuration,
+                                              val indexAutoCreate: Boolean)
 
 object CouchbaseJournalSettings {
 
@@ -27,8 +28,9 @@ object CouchbaseJournalSettings {
       timeout = config.getDuration("write.write-timeout").toMillis.millis
     )
     val readTimeout = config.getDuration("write.read-timeout").toMillis.millis
+    val indexAutoCreate = config.getBoolean("write.index-autocreate")
 
-    new CouchbaseJournalSettings(sessionSettings, bucket, writeSettings, readTimeout)
+    new CouchbaseJournalSettings(sessionSettings, bucket, writeSettings, readTimeout, indexAutoCreate)
   }
 
   private def parseReplicateTo(value: String): ReplicateTo = value match {
@@ -50,7 +52,9 @@ object CouchbaseJournalSettings {
   }
 }
 
-final class CouchbaseReadJournalSettings private (val sessionSettings: CouchbaseSessionSettings, val bucket: String)
+final class CouchbaseReadJournalSettings private (val sessionSettings: CouchbaseSessionSettings,
+                                                  val bucket: String,
+                                                  val indexAutoCreate: Boolean)
 
 object CouchbaseReadJournalSettings {
 
@@ -59,12 +63,15 @@ object CouchbaseReadJournalSettings {
     val clientConfig = config.getConfig("connection")
     val bucket = config.getString("write.bucket")
     val sessionSettings = CouchbaseSessionSettings(clientConfig)
+    val indexAutoCreate = config.getBoolean("read.index-autocreate")
 
-    new CouchbaseReadJournalSettings(sessionSettings, bucket)
+    new CouchbaseReadJournalSettings(sessionSettings, bucket, indexAutoCreate)
   }
 }
 
-final class CouchbaseSnapshotSettings private (val sessionSettings: CouchbaseSessionSettings, val bucket: String)
+final class CouchbaseSnapshotSettings private (val sessionSettings: CouchbaseSessionSettings,
+                                               val bucket: String,
+                                               val indexAutoCreate: Boolean)
 
 object CouchbaseSnapshotSettings {
 
@@ -73,7 +80,8 @@ object CouchbaseSnapshotSettings {
     val clientConfig = config.getConfig("connection")
     val bucket = config.getString("snapshot.bucket")
     val sessionSettings = CouchbaseSessionSettings(clientConfig)
+    val indexAutoCreate = config.getBoolean("snapshot.index-autocreate")
 
-    new CouchbaseSnapshotSettings(sessionSettings, bucket)
+    new CouchbaseSnapshotSettings(sessionSettings, bucket, indexAutoCreate)
   }
 }

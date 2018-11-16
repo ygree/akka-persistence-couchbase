@@ -12,6 +12,7 @@ import akka.dispatch.ExecutionContexts
 import akka.persistence.PersistentRepr
 import akka.persistence.couchbase.CouchbaseJournal.TaggedPersistentRepr
 import akka.serialization.{AsyncSerializer, Serialization, Serializers}
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
 
@@ -129,9 +130,11 @@ private[akka] final object CouchbaseSchema {
     val writerUuid = value.getString(Fields.WriterUuid)
     require(sequenceTo - from + 1 == events.size())
     val nrReply = localTo - from
-    Future.sequence((0 to nrReply.asInstanceOf[Int]).map { i =>
-      extract(persistenceId, writerUuid, events.getObject(i), serialization)
-    }.toVector)
+    Future.sequence(
+      (0 to nrReply.asInstanceOf[Int]).map { i =>
+        extract(persistenceId, writerUuid, events.getObject(i), serialization)
+      }.toVector
+    )
   }
 
   def extractEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization)(
@@ -157,6 +160,13 @@ private[akka] final object CouchbaseSchema {
       )
     }
 
+  /**
+   * Creates `pi2` index
+   *
+   * @return true if the index is already existed, otherwise false
+   */
+  def createPi2Index(session: CouchbaseSession): Future[Boolean] =
+    session.createIndex("pi2", true, Fields.PersistenceId, Fields.SequenceFrom)
 }
 
 /**

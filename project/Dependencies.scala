@@ -54,7 +54,8 @@ object Dependencies {
     akkaPersistenceTck,
     akkaStreamTestkit,
     logback,
-    scalaTest
+    scalaTest,
+    slf4jApi
   )
 
   val couchbaseClient = Seq(

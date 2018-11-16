@@ -12,11 +12,12 @@ import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
-import com.couchbase.client.java.{AsyncBucket, Bucket, Cluster}
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
-import rx.RxReactiveStreams
+import com.couchbase.client.java.{AsyncBucket, AsyncCluster}
+import rx.functions.Func1
+import rx.{Observable, RxReactiveStreams}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
@@ -28,8 +29,8 @@ import scala.concurrent.duration.FiniteDuration
  * InternalAPI
  */
 @InternalApi
-final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Option[Cluster]) extends CouchbaseSession {
-  private val asyncBucket = bucket.async()
+final private[couchbase] class CouchbaseSessionImpl(asyncBucket: AsyncBucket, cluster: Option[AsyncCluster])
+    extends CouchbaseSession {
   import RxUtilities._
 
   override def underlying: AsyncBucket = asyncBucket
@@ -105,17 +106,36 @@ final private[couchbase] class CouchbaseSessionImpl(bucket: Bucket, cluster: Opt
   def close(): Future[Done] =
     if (!asyncBucket.isClosed) {
       singleObservableToFuture(asyncBucket.close(), "close")
-        .map { _ =>
+        .flatMap { _ =>
           // FIXME blocking on global ec right now
           cluster match {
-            case Some(cluster) => cluster.disconnect()
-            case None =>
+            case Some(cluster) =>
+              singleObservableToFuture(cluster.disconnect(), "close").map(_ => Done)(ExecutionContexts.global())
+            case None => Future.successful(Done)
           }
         }(ExecutionContexts.global())
-        .map(_ => Done)(ExecutionContexts.sameThreadExecutionContext)
     } else {
       Future.successful(Done)
     }
 
-  override def toString: String = s"CouchbaseSession(${bucket.name()})"
+  override def toString: String = s"CouchbaseSession(${asyncBucket.name()})"
+
+  override def createIndex(indexName: String, ignoreIfExist: Boolean, fields: String*): Future[Boolean] = {
+    val result: Observable[Boolean] = asyncBucket
+      .bucketManager()
+      .flatMap(
+        func1Observable(_.createN1qlIndex(indexName, ignoreIfExist, false, fields: _*))
+      )
+      .map(func1(Boolean.unbox))
+    RxUtilities.singleObservableToFuture(result, s"Create index: $indexName")
+  }
+
+  private def func1Observable[T, R](fun: T => Observable[R]) =
+    new Func1[T, Observable[R]]() {
+      override def call(b: T): Observable[R] = fun(b)
+    }
+  private def func1[T, R](fun: T => R) =
+    new Func1[T, R]() {
+      override def call(b: T): R = fun(b)
+    }
 }

@@ -4,8 +4,7 @@
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
-import akka.persistence.couchbase.CouchbaseJournalSettings
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.persistence.couchbase.{Couchbase, CouchbaseJournalSettings}
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
 import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{
   CouchbasePersistentEntityRegistry,
@@ -50,12 +49,14 @@ trait ReadSideCouchbasePersistenceComponents extends ReadSidePersistenceComponen
     configuration.underlying.getConfig("couchbase-journal")
   )
 
-  lazy val session: CouchbaseSession = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  lazy val couchbase: Couchbase =
+    Couchbase(settings.sessionSettings, settings.bucket, settings.indexAutoCreate)(actorSystem.dispatcher)
 
   private[lagom] lazy val couchbaseOffsetStore: CouchbaseOffsetStore =
-    new ScaladslCouchbaseOffsetStore(actorSystem, session, readSideConfig)(executionContext)
+    new ScaladslCouchbaseOffsetStore(actorSystem, couchbase, readSideConfig)
 
   lazy val offsetStore: OffsetStore = couchbaseOffsetStore
 
-  lazy val couchbaseReadSide: CouchbaseReadSide = new CouchbaseReadSideImpl(actorSystem, session, couchbaseOffsetStore)
+  lazy val couchbaseReadSide: CouchbaseReadSide =
+    new CouchbaseReadSideImpl(actorSystem, couchbase, couchbaseOffsetStore)
 }

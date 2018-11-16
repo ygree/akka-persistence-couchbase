@@ -27,17 +27,16 @@ class CouchbaseReadSideSpec
     extends CouchbasePersistenceSpec(CouchbaseReadSideSpec.defaultConfig, TestEntitySerializerRegistry)
     with AbstractReadSideSpec
     with CouchbaseBucketSetup {
-  import system.dispatcher
 
   override protected lazy val persistentEntityRegistry = new CouchbasePersistentEntityRegistry(system)
 
-  private lazy val offsetStore = new ScaladslCouchbaseOffsetStore(system, session, ReadSideConfig())
-  private lazy val couchbaseReadSide = new CouchbaseReadSideImpl(system, session, offsetStore)
+  private lazy val offsetStore = new ScaladslCouchbaseOffsetStore(system, couchbase, ReadSideConfig())
+  private lazy val couchbaseReadSide = new CouchbaseReadSideImpl(system, couchbase, offsetStore)
 
   override def processorFactory(): ReadSideProcessor[Evt] =
-    new TestEntityReadSide.TestEntityReadSideProcessor(system, couchbaseReadSide, session)
+    new TestEntityReadSide.TestEntityReadSideProcessor(system, couchbaseReadSide)
 
-  private lazy val readSide = new TestEntityReadSide(system, session)
+  private lazy val readSide = new TestEntityReadSide(system, couchbase)
 
   override def getAppendCount(id: String): Future[Long] = readSide.getAppendCount(id)
 

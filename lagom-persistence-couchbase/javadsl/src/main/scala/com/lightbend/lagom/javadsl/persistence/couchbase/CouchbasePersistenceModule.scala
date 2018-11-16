@@ -7,8 +7,7 @@ package com.lightbend.lagom.javadsl.persistence.couchbase
 import java.net.URI
 
 import akka.actor.ActorSystem
-import akka.persistence.couchbase.CouchbaseJournalSettings
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.persistence.couchbase.{Couchbase, CouchbaseJournalSettings}
 import com.google.inject.Provider
 import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{
   CouchbasePersistentEntityRegistry,
@@ -41,21 +40,19 @@ class CouchbasePersistenceModule extends Module {
     //    bind[CassandraReadSideSettings].toSelf,
     //    bind[CassandraOffsetStore].to[JavadslCassandraOffsetStore],
     bind[OffsetStore].to(bind[JavadslCouchbaseOffsetStore]),
-    bind[CouchbaseSession].toProvider[CouchbaseSessionProvider] //TODO:
+    bind[Couchbase].toProvider[CouchbaseProvider]
   )
 
 }
 
-private[lagom] class CouchbaseSessionProvider @Inject()(cfg: Config) extends Provider[CouchbaseSession] {
+private[lagom] class CouchbaseProvider @Inject()(system: ActorSystem, cfg: Config) extends Provider[Couchbase] {
 
   private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(cfg.getConfig("couchbase-journal"))
-  //  private implicit val ec: ExecutionContext = context.dispatcher
 
-  val session = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  private lazy val couchbase =
+    Couchbase(settings.sessionSettings, settings.bucket, settings.indexAutoCreate)(system.dispatcher)
 
-  override def get(): CouchbaseSession =
-    //TODO:
-    session
+  override def get(): Couchbase = couchbase
 }
 
 private[lagom] object CouchbasePersistenceModule {
