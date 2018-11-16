@@ -28,10 +28,10 @@ class RequestTimeoutTestSpec extends WordSpec with Matchers with ScalaFutures wi
 
   override implicit def patienceConfig: PatienceConfig = PatienceConfig(1500.seconds, 150.millis)
 
-  private implicit val system = ActorSystem("RequestTimeout")
+  private implicit val system = ActorSystem("RequestTimeoutTestSpec")
   private implicit val materializer = ActorMaterializer()
 
-  private val bucketName = "RequestTimeout"
+  private val bucketName = "RequestTimeoutTestSpec"
 
   val numberOfDocs: Long = 10 * 1000
 
@@ -45,20 +45,21 @@ class RequestTimeoutTestSpec extends WordSpec with Matchers with ScalaFutures wi
   val cluster = CouchbaseCluster.create(env)
   cluster.authenticate("admin", "admin1")
 
-  val manager = cluster.clusterManager()
-  if (!manager.hasBucket(bucketName)) {
+  {
+    val manager = cluster.clusterManager()
+    if (manager.hasBucket(bucketName)) {
+      cluster.clusterManager().removeBucket(bucketName)
+    }
     val bucketSettings = new DefaultBucketSettings.Builder()
       .`type`(BucketType.COUCHBASE)
       .name(bucketName)
       .quota(100)
-      .enableFlush(true)
       .build()
     manager.insertBucket(bucketSettings)
   }
 
   val bucket = cluster.openBucket(bucketName)
   bucket.bucketManager().dropN1qlPrimaryIndex(true)
-  bucket.bucketManager().flush()
 
   val session = CouchbaseSession(cluster.openBucket(bucketName))
 
