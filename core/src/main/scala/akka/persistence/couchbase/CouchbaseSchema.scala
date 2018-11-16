@@ -13,12 +13,14 @@ import akka.persistence.PersistentRepr
 import akka.persistence.couchbase.CouchbaseJournal.TaggedPersistentRepr
 import akka.serialization.{AsyncSerializer, Serialization, Serializers}
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.util.OptionVal
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
 
 import scala.collection.immutable
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 /*
  * INTERNAL API
@@ -41,7 +43,9 @@ private[akka] final object CouchbaseSchema {
              "sequence_nr": 1,
              "ser_id": 1,
              "ser_manifest": "",
-             "payload": "rO0ABXQACHAyLWV2dC0x",
+             // either of these two depending on serializer
+             "payload_bin": "rO0ABXQACHAyLWV2dC0x",
+             "payload": { json- }
              "tags": []
            }
          ],
@@ -58,7 +62,9 @@ private[akka] final object CouchbaseSchema {
     val SequenceTo = "sequence_to"
     val Ordering = "ordering"
     val Timestamp = "timestamp"
-    val Payload = "payload"
+    // separate fields for json and base64 bin payloads
+    val JsonPayload = "payload"
+    val BinaryPayload = "payload_bin"
     val WriterUuid = "writer_uuid"
     val Messages = "messages"
     // the specific tags on an individual message
@@ -82,7 +88,9 @@ private[akka] final object CouchbaseSchema {
       {
         "sequence_nr": 15,
         "ser_manifest": "",
-        "payload": "rO0ABXQAA3MtNQ==",
+        // either of these two depending on serializer
+        "payload_bin": "rO0ABXQACHAyLWV2dC0x",
+        "payload": { json- }
         "ser_id": 1,
         "type": "snapshot",
         "timestamp": 1542205413616,
@@ -109,12 +117,22 @@ private[akka] final object CouchbaseSchema {
         .put(Fields.DeletedTo, deletedTo)
     )
 
-  def serializedMessageToObject(msg: SerializedMessage): JsonObject =
-    JsonObject
+  def serializedMessageToObject(msg: SerializedMessage): JsonObject = {
+    val json = JsonObject
       .create()
       .put(Fields.SerializerManifest, msg.manifest)
       .put(Fields.SerializerId, msg.identifier)
-      .put(Fields.Payload, Base64.getEncoder.encodeToString(msg.payload))
+
+    msg.nativePayload match {
+      case OptionVal.None =>
+        json.put(Fields.BinaryPayload, Base64.getEncoder.encodeToString(msg.payload))
+
+      case OptionVal.Some(jsonPayload) =>
+        json.put(Fields.JsonPayload, jsonPayload)
+    }
+
+    json
+  }
 
   def deserializeEvents[T](
       value: JsonObject,
@@ -173,7 +191,10 @@ private[akka] final object CouchbaseSchema {
  * INTERNAL API
  */
 @InternalApi
-private[akka] final case class SerializedMessage(identifier: Int, manifest: String, payload: Array[Byte])
+private[akka] final case class SerializedMessage(identifier: Int,
+                                                 manifest: String,
+                                                 payload: Array[Byte],
+                                                 nativePayload: OptionVal[JsonObject])
 
 /**
  * INTERNAL API
@@ -190,33 +211,48 @@ private[akka] object SerializedMessage {
 
     val serId: Int = serializer.identifier
 
-    val bytes = serializer match {
+    serializer match {
       case async: AsyncSerializer =>
         Serialization.withTransportInformation(system.asInstanceOf[ExtendedActorSystem]) { () =>
-          async.toBinaryAsync(event)
+          async
+            .toBinaryAsync(event)
+            .map(bytes => SerializedMessage(serId, serManifest, bytes, OptionVal.None))(
+              ExecutionContexts.sameThreadExecutionContext
+            )
         }
-      case _ =>
-        Future.fromTry(serialization.serialize(event))
-    }
 
-    bytes.map(b => SerializedMessage(serId, serManifest, b))(ExecutionContexts.sameThreadExecutionContext)
+      case jsonSerializer: JsonSerializer =>
+        Future.fromTry(
+          Try(SerializedMessage(serId, serManifest, Array.emptyByteArray, OptionVal.Some(jsonSerializer.toJson(event))))
+        )
+
+      case _ =>
+        Future.fromTry(Try(SerializedMessage(serId, serManifest, serialization.serialize(event).get, OptionVal.None)))
+    }
   }
 
   def fromJsonObject(serialization: Serialization,
                      jsonObject: JsonObject)(implicit system: ActorSystem): Future[Any] = {
     val serId = jsonObject.getInt(Fields.SerializerId)
     val manifest = jsonObject.getString(Fields.SerializerManifest)
-    val payload = jsonObject.getString(Fields.Payload)
-    val bytes = Base64.getDecoder.decode(payload)
+
+    def decodeBytes = {
+      val payload = jsonObject.getString(Fields.BinaryPayload)
+      Base64.getDecoder.decode(payload)
+    }
     val serializer = serialization.serializerByIdentity(serId)
 
     serializer match {
       case async: AsyncSerializer =>
         Serialization.withTransportInformation(system.asInstanceOf[ExtendedActorSystem]) { () =>
-          async.fromBinaryAsync(bytes, manifest)
+          async.fromBinaryAsync(decodeBytes, manifest)
         }
+
+      case jsonSerializer: JsonSerializer =>
+        Future.fromTry(Try(jsonSerializer.fromJson(jsonObject.getObject(Fields.JsonPayload), manifest)))
+
       case _ =>
-        Future.fromTry(serialization.deserialize(bytes, serId, manifest))
+        Future.fromTry(serialization.deserialize(decodeBytes, serId, manifest))
     }
   }
 

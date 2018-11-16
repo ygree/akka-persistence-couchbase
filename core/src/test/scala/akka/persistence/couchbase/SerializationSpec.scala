@@ -7,6 +7,7 @@ package akka.persistence.couchbase
 import akka.actor.{ActorSystem, ExtendedActorSystem}
 import akka.serialization.{AsyncSerializerWithStringManifest, SerializationExtension}
 import akka.testkit.TestKit
+import com.couchbase.client.java.document.json.JsonObject
 import com.typesafe.config.ConfigFactory
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpec}
@@ -15,6 +16,7 @@ import scala.concurrent.Future
 
 case class MyEvent(n: Int)
 case class MyEventAsync(n: Int)
+case class MyEventNative(n: Int)
 
 class MyEventAsyncSerializer(system: ExtendedActorSystem) extends AsyncSerializerWithStringManifest(system) {
 
@@ -39,18 +41,35 @@ class MyEventAsyncSerializer(system: ExtendedActorSystem) extends AsyncSerialize
 
 }
 
+class MyEventNativeJsonSerializer extends JsonSerializer {
+  override def identifier: Int = 2001
+  override def manifest(o: AnyRef): String = o match {
+    case _: MyEventNative => "js"
+  }
+  override def toJson(o: AnyRef): JsonObject = o match {
+    case MyEventNative(n) =>
+      JsonObject
+        .create()
+        .put("n", n)
+  }
+  override def fromJson(json: JsonObject, manifest: String): AnyRef = manifest match {
+    case "js" =>
+      MyEventNative(json.getInt("n"))
+  }
+}
+
 class SerializationSpec extends WordSpec with Matchers with BeforeAndAfterAll with ScalaFutures {
 
   implicit val system = ActorSystem(
     "SerializationSpec",
-    ConfigFactory.parseString(
-      """
-    akka.actor.serializers.async="akka.persistence.couchbase.MyEventAsyncSerializer"
-    akka.actor.serialization-bindings {
-      "akka.persistence.couchbase.MyEventAsync" = async
-    }
-    """
-    )
+    ConfigFactory.parseString("""
+        akka.actor.serializers.async="akka.persistence.couchbase.MyEventAsyncSerializer"
+        akka.actor.serializers.js="akka.persistence.couchbase.MyEventNativeJsonSerializer"
+        akka.actor.serialization-bindings {
+          "akka.persistence.couchbase.MyEventAsync" = async
+          "akka.persistence.couchbase.MyEventNative" = js
+        }
+      """)
   )
   val serialization = SerializationExtension(system)
 
@@ -68,6 +87,15 @@ class SerializationSpec extends WordSpec with Matchers with BeforeAndAfterAll wi
       val event = MyEventAsync(42)
       val serializedEvent = SerializedMessage.serialize(serialization, event).futureValue
       val json = CouchbaseSchema.serializedMessageToObject(serializedEvent)
+      val deserialized = SerializedMessage.fromJsonObject(serialization, json).futureValue
+      deserialized should ===(event)
+    }
+
+    "serialize native json" in {
+      val event = MyEventNative(42)
+      val serializedEvent = SerializedMessage.serialize(serialization, event)
+      val json: JsonObject = CouchbaseSchema.serializedMessageToObject(serializedEvent.futureValue)
+      // serialized form: {"ser_manifest":"js","payload":{"n":42},"ser_id":2001}
       val deserialized = SerializedMessage.fromJsonObject(serialization, json).futureValue
       deserialized should ===(event)
     }
