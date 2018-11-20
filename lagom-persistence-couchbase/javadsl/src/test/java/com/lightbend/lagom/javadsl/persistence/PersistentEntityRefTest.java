@@ -50,8 +50,13 @@ public class PersistentEntityRefTest {
         "akka.remote.netty.tcp.port = 0 \n" +
         "akka.remote.netty.tcp.hostname = 127.0.0.1 \n" +
         "akka.loglevel = INFO \n" +
-        "akka.cluster.sharding.distributed-data.durable.keys = [] \n");
-
+        "akka.cluster.sharding.distributed-data.durable.keys = [] \n" +
+        "akka.persistence.journal.plugin = couchbase-journal.write \n" +
+        "akka.persistence.snapshot-store.plugin = couchbase-journal.snapshot \n" +
+        "couchbase-journal.connection.nodes.0 = localhost \n" +
+        "couchbase-journal.connection.username = admin \n" +
+        "couchbase-journal.connection.password = admin1 \n"
+        );
     application = new GuiceApplicationBuilder()
             .configure(config)
             .build();
@@ -64,10 +69,10 @@ public class PersistentEntityRefTest {
     awaitPersistenceInit(system);
 
     // FIXME, stop creating a new one of these
-    CouchbaseCluster.create()
-        .authenticate("admin", "admin1")
-        .openBucket("akka")
-        .query(N1qlQuery.simple("delete from akka"));
+//    CouchbaseCluster.create()
+//        .authenticate("admin", "admin1")
+//        .openBucket("akka")
+//        .query(N1qlQuery.simple("delete from akka"));
 
   }
 

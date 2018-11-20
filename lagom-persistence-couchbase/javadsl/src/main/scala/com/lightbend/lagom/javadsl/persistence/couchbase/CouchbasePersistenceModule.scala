@@ -5,6 +5,8 @@
 package com.lightbend.lagom.javadsl.persistence.couchbase
 
 import java.net.URI
+import java.util.concurrent.CompletionStage
+import java.util.{function, Optional}
 
 import akka.actor.ActorSystem
 import akka.persistence.couchbase.CouchbaseJournalSettings
@@ -15,7 +17,7 @@ import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{
   JavadslCouchbaseOffsetStore
 }
 import com.lightbend.lagom.internal.persistence.couchbase.{ServiceLocatorAdapter, ServiceLocatorHolder}
-import com.lightbend.lagom.javadsl.api.ServiceLocator
+import com.lightbend.lagom.javadsl.api.{Descriptor, ServiceLocator}
 import com.lightbend.lagom.javadsl.persistence.PersistentEntityRegistry
 import com.lightbend.lagom.spi.persistence.OffsetStore
 import com.typesafe.config.Config
@@ -36,13 +38,26 @@ class CouchbasePersistenceModule extends Module {
   override def bindings(environment: Environment, configuration: Configuration): Seq[Binding[_]] = Seq(
     bind[CouchbasePersistenceModule.InitServiceLocatorHolder].toSelf.eagerly(),
     bind[PersistentEntityRegistry].to[CouchbasePersistentEntityRegistry],
+    bind[CouchbaseSession].toProvider[CouchbaseProvider],
     //TODO: add other modules similar to Cassandra
     //    bind[CassandraSession].toSelf,
     //    bind[CassandraReadSide].to[CassandraReadSideImpl],
     //    bind[CassandraReadSideSettings].toSelf,
     //    bind[CassandraOffsetStore].to[JavadslCassandraOffsetStore],
-    bind[OffsetStore].to(bind[JavadslCouchbaseOffsetStore]),
-    bind[CouchbaseSession].toProvider[CouchbaseProvider]
+    bind[OffsetStore].to(bind[JavadslCouchbaseOffsetStore])
+//    bind[ServiceLocator].to(new ServiceLocator() {
+//      override def locate(
+//          name: String,
+//          serviceCall: Descriptor.Call[_, _]
+//      ): CompletionStage[Optional[URI]] =
+//        ???
+//      override def doWithService[T](
+//          name: String,
+//          serviceCall: Descriptor.Call[_, _],
+//          block: function.Function[URI, CompletionStage[T]]
+//      ): CompletionStage[Optional[T]] =
+//        ???
+//    })
   )
 
 }

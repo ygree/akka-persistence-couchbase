@@ -21,6 +21,9 @@ object Dependencies {
     val akkaPersistence = "com.typesafe.akka" %% "akka-persistence" % AkkaVersion
     val akkaPersistenceQuery = "com.typesafe.akka" %% "akka-persistence-query" % AkkaVersion
 
+    val lagomJavaDslClient = "com.lightbend.lagom" %% "lagom-javadsl-client" % LagomVersion
+    val lagomScalaDslClient = "com.lightbend.lagom" %% "lagom-scaladsl-client" % LagomVersion
+
     val lagomPersistence = "com.lightbend.lagom" %% "lagom-persistence-core" % LagomVersion
     val lagomPersistenceScalaDsl = "com.lightbend.lagom" %% "lagom-scaladsl-persistence" % LagomVersion
     val lagomPersistenceJavaDsl = "com.lightbend.lagom" %% "lagom-javadsl-persistence" % LagomVersion
@@ -80,24 +83,28 @@ object Dependencies {
   val `lagom-persistence-couchbase-core` = Seq(
     slf4jApi,
     lagomPersistence,
-    "com.lightbend.lagom" %% "lagom-scaladsl-server" % LagomVersion,
+//    "com.lightbend.lagom" %% "lagom-scaladsl-server" % LagomVersion,
     scalaTest
   )
 
   val `lagom-persistence-couchbase-scaladsl` = Seq(
-    lagomPersistenceTestKit,
+    lagomPersistence,
     lagomPersistenceScalaDsl,
-    lagomTestKitScalaDsl,
-    lagomPlayJson % "test",
-    scalaTest
+//    lagomPersistenceTestKit,
+//    lagomTestKitScalaDsl,
+//    lagomPlayJson % "test",
+    scalaTest,
+    lagomScalaDslClient
   )
 
   val `lagom-persistence-couchbase-javadsl` = Seq(
-    lagomPersistenceTestKit,
+    lagomPersistence,
     lagomPersistenceJavaDsl,
-    lagomTestKitJavaDsl,
-    lagomJavaDslJackson,
-    junit
+//    lagomPersistenceTestKit,
+//    lagomTestKitJavaDsl,
+//    lagomJavaDslJackson,
+    junit,
+    lagomJavaDslClient
   )
 
 }
