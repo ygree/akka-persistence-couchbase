@@ -21,10 +21,9 @@ object Dependencies {
     val akkaPersistence = "com.typesafe.akka" %% "akka-persistence" % AkkaVersion
     val akkaPersistenceQuery = "com.typesafe.akka" %% "akka-persistence-query" % AkkaVersion
 
-    val lagomJavaDslClient = "com.lightbend.lagom" %% "lagom-javadsl-client" % LagomVersion
-    val lagomScalaDslClient = "com.lightbend.lagom" %% "lagom-scaladsl-client" % LagomVersion
-
-    val lagomPersistence = "com.lightbend.lagom" %% "lagom-persistence-core" % LagomVersion
+    val lagomJavaDslApi = "com.lightbend.lagom" %% "lagom-javadsl-api" % LagomVersion
+    val lagomScalaDslApi = "com.lightbend.lagom" %% "lagom-scaladsl-api" % LagomVersion
+    val lagomPersistenceCore = "com.lightbend.lagom" %% "lagom-persistence-core" % LagomVersion
     val lagomPersistenceScalaDsl = "com.lightbend.lagom" %% "lagom-scaladsl-persistence" % LagomVersion
     val lagomPersistenceJavaDsl = "com.lightbend.lagom" %% "lagom-javadsl-persistence" % LagomVersion
     val lagomPlayJson = "com.lightbend.lagom" %% "lagom-scaladsl-play-json" % LagomVersion
@@ -40,7 +39,7 @@ object Dependencies {
 
     val logback = "ch.qos.logback" % "logback-classic" % "1.2.3" % "test" // EPL 1.0 / LGPL 2.1
     val scalaTest = "org.scalatest" %% "scalatest" % "3.0.4" % "test" // ApacheV2
-    val junit = "junit" % "junit" % "4.12" % "test"
+    val junit = "junit" % "junit" % "4.12"
 
     val lagomTestKitScalaDsl = "com.lightbend.lagom" %% "lagom-scaladsl-testkit" % LagomVersion % "test"
     val lagomTestKitJavaDsl = "com.lightbend.lagom" %% "lagom-javadsl-testkit" % LagomVersion % "test"
@@ -73,7 +72,7 @@ object Dependencies {
   )
 
   val `copy-of-lagom-persistence-test` = Seq(
-    lagomPersistence,
+    lagomPersistenceCore,
     lagomPersistenceScalaDsl,
     lagomPersistenceJavaDsl,
     akkaTestkit,
@@ -82,29 +81,22 @@ object Dependencies {
 
   val `lagom-persistence-couchbase-core` = Seq(
     slf4jApi,
-    lagomPersistence,
-//    "com.lightbend.lagom" %% "lagom-scaladsl-server" % LagomVersion,
+    lagomPersistenceCore,
     scalaTest
   )
 
   val `lagom-persistence-couchbase-scaladsl` = Seq(
-    lagomPersistence,
+    lagomPersistenceCore,
     lagomPersistenceScalaDsl,
-//    lagomPersistenceTestKit,
-//    lagomTestKitScalaDsl,
-//    lagomPlayJson % "test",
     scalaTest,
-    lagomScalaDslClient
+    lagomScalaDslApi
   )
 
   val `lagom-persistence-couchbase-javadsl` = Seq(
-    lagomPersistence,
+    lagomPersistenceCore,
     lagomPersistenceJavaDsl,
-//    lagomPersistenceTestKit,
-//    lagomTestKitJavaDsl,
-//    lagomJavaDslJackson,
-    junit,
-    lagomJavaDslClient
+    junit % sbt.Test,
+    lagomJavaDslApi
   )
 
 }

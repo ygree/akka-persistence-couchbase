@@ -7,6 +7,7 @@ package com.lightbend.lagom.javadsl.persistence;
 import akka.actor.ActorSystem;
 import akka.cluster.Cluster;
 import akka.pattern.AskTimeoutException;
+import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.CouchbaseCluster;
 import com.couchbase.client.java.query.N1qlQuery;
 import com.lightbend.lagom.javadsl.persistence.PersistentEntity.InvalidCommandException;
@@ -14,11 +15,11 @@ import com.lightbend.lagom.javadsl.persistence.PersistentEntity.UnhandledCommand
 import com.lightbend.lagom.javadsl.persistence.TestEntity.Cmd;
 import com.lightbend.lagom.javadsl.persistence.TestEntity.Evt;
 import com.lightbend.lagom.javadsl.persistence.TestEntity.State;
+import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbasePersistenceSpec;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import play.Application;
 import play.inject.Injector;
@@ -37,11 +38,14 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
 
-//TODO fix it
+//TODO how to make it run with Sbt?
 public class PersistentEntityRefTest {
 
   static Injector injector;
   static Application application;
+
+  static CouchbaseCluster couchbaseCluster;
+  static Bucket bucket;
 
   @BeforeClass
   public static void setup() {
@@ -50,13 +54,9 @@ public class PersistentEntityRefTest {
         "akka.remote.netty.tcp.port = 0 \n" +
         "akka.remote.netty.tcp.hostname = 127.0.0.1 \n" +
         "akka.loglevel = INFO \n" +
-        "akka.cluster.sharding.distributed-data.durable.keys = [] \n" +
-        "akka.persistence.journal.plugin = couchbase-journal.write \n" +
-        "akka.persistence.snapshot-store.plugin = couchbase-journal.snapshot \n" +
-        "couchbase-journal.connection.nodes.0 = localhost \n" +
-        "couchbase-journal.connection.username = admin \n" +
-        "couchbase-journal.connection.password = admin1 \n"
-        );
+        "akka.cluster.sharding.distributed-data.durable.keys = [] \n"
+        ).withFallback(CouchbasePersistenceSpec.couchbaseConfig());
+
     application = new GuiceApplicationBuilder()
             .configure(config)
             .build();
@@ -68,18 +68,32 @@ public class PersistentEntityRefTest {
 
     awaitPersistenceInit(system);
 
-    // FIXME, stop creating a new one of these
-//    CouchbaseCluster.create()
-//        .authenticate("admin", "admin1")
-//        .openBucket("akka")
-//        .query(N1qlQuery.simple("delete from akka"));
-
+    // TODO reuse parts of akka.persistence.couchbase.CouchbaseBucketSetup
+    couchbaseCluster = CouchbaseCluster.create()
+        .authenticate("admin", "admin1");
+    bucket = couchbaseCluster.openBucket("akka");
+    bucket.bucketManager().createN1qlPrimaryIndex(true, false);
+    bucket.query(N1qlQuery.simple("delete from akka"));
+    bucket.bucketManager().dropN1qlPrimaryIndex(true);
   }
-
 
   @AfterClass
   public static void teardown() {
-    application.asScala().stop();
+    try {
+      application.asScala().stop();
+    } catch (Throwable t) {
+      t.printStackTrace();
+    }
+    try {
+      bucket.close();
+    } catch (Throwable t) {
+      t.printStackTrace();
+    }
+    try {
+      couchbaseCluster.disconnect();
+    } catch (Throwable t) {
+      t.printStackTrace();
+    }
   }
 
   public static class AnotherEntity extends PersistentEntity<Integer, String, String> {

@@ -41,28 +41,20 @@ class PersistentEntityRefSpec
     with BeforeAndAfterAll
     with ScalaFutures
     with TypeCheckedTripleEquals
-    with CouchbaseBucketSetup {
+    with CouchbaseBucketSetup // CouchbaseBucketSetup's only needed here for cleaning up the bucket before the test
+    {
 
   override implicit val patienceConfig = PatienceConfig(5.seconds, 150.millis)
 
-  val config: Config = ConfigFactory.parseString("""
+  private val config: Config = ConfigFactory.parseString("""
       akka.actor.provider = akka.cluster.ClusterActorRefProvider
       akka.remote.netty.tcp.port = 0
       akka.remote.netty.tcp.hostname = 127.0.0.1
       akka.loglevel = INFO
       akka.cluster.sharding.distributed-data.durable.keys = []
-
-      couchbase-journal.connection.nodes = ["localhost"]
-      couchbase-journal.write.parallelism = 1
-      couchbase-journal.write.persist-to = none
-      couchbase-journal.write.replicate-to = none
-      couchbase-journal.write.write-timeout = 15s
-      couchbase-journal.write.read-timeout = 15s
-
-      couchbase-journal.write.index-autocreate = on
   """).withFallback(CouchbasePersistenceSpec.couchbaseConfig())
 
-  protected val system: ActorSystem = ActorSystem(
+  private val system: ActorSystem = ActorSystem(
     "PersistentEntityRefSpec",
     ActorSystemSetup(BootstrapSetup(config), JsonSerializerRegistry.serializationSetupFor(TestEntitySerializerRegistry))
   )

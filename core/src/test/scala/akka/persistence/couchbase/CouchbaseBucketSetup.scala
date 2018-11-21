@@ -6,7 +6,6 @@ package akka.persistence.couchbase
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.query.N1qlQuery
 import com.couchbase.client.java.{Cluster, CouchbaseCluster}
@@ -19,7 +18,6 @@ import scala.util.Try
 // FIXME this is currently almost test-kit used across all modules, make it testkit or duplicate instead of a test-test dependency?
 trait CouchbaseBucketSetup extends BeforeAndAfterAll { self: Suite =>
 
-  protected def system: ActorSystem
   private var cluster: Cluster = _
   protected var couchbaseSession: CouchbaseSession = _
   // FIXME pick these up from config instead

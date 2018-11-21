@@ -23,13 +23,16 @@ object CouchbasePersistenceSpec {
       |
       |couchbase-journal {
       |  connection {
-      |    # nodes = [] # default
+      |    nodes = ["localhost"]
       |    username = "admin"
       |    password = "admin1"
       |  }
       |  write.bucket = "akka"
-      |  write.index-autocreate=on
-      |  read.index-autocreate=on
+      |  write.parallelism = 1
+      |  write.persist-to = none
+      |  write.replicate-to = none
+      |  write.write-timeout = 15s
+      |  write.read-timeout = 15s
       |  snapshot.bucket = "akka"
       |}
     """.stripMargin)

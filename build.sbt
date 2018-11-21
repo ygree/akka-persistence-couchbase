@@ -1,4 +1,4 @@
-import sbt.Keys.{name, publishArtifact}
+import sbt.Keys.{name, publishArtifact, testOptions}
 
 def common: Seq[Setting[_]] = Seq(
   organization := "com.lightbend.akka",
@@ -128,12 +128,12 @@ lazy val `lagom-persistence-couchbase-core` = (project in file("lagom-persistenc
   )
 
 lazy val `lagom-persistence-couchbase-javadsl` = (project in file("lagom-persistence-couchbase/javadsl"))
+  .settings(common)
   .dependsOn(
     core % "compile;test->test",
     `lagom-persistence-couchbase-core` % "compile;test->test",
     `copy-of-lagom-persistence-test` % "test->test"
   )
-  .settings(common)
   .enablePlugins(AutomateHeaderPlugin)
   .settings(
     name := "lagom-javadsl-persistence-couchbase",
