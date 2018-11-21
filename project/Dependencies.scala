@@ -39,7 +39,8 @@ object Dependencies {
 
     val logback = "ch.qos.logback" % "logback-classic" % "1.2.3" % "test" // EPL 1.0 / LGPL 2.1
     val scalaTest = "org.scalatest" %% "scalatest" % "3.0.4" % "test" // ApacheV2
-    val junit = "junit" % "junit" % "4.12"
+    val junit = "junit" % "junit" % "4.12" % "test"
+    val junitInterface = "com.novocode" % "junit-interface" % "0.11" % "test"
 
     val lagomTestKitScalaDsl = "com.lightbend.lagom" %% "lagom-scaladsl-testkit" % LagomVersion % "test"
     val lagomTestKitJavaDsl = "com.lightbend.lagom" %% "lagom-javadsl-testkit" % LagomVersion % "test"
@@ -95,8 +96,9 @@ object Dependencies {
   val `lagom-persistence-couchbase-javadsl` = Seq(
     lagomPersistenceCore,
     lagomPersistenceJavaDsl,
-    junit % sbt.Test,
-    lagomJavaDslApi
+    lagomJavaDslApi,
+    junit,
+    junitInterface
   )
 
 }

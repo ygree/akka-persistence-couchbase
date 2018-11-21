@@ -38,7 +38,6 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
 
-//TODO how to make it run with Sbt?
 public class PersistentEntityRefTest {
 
   static Injector injector;
