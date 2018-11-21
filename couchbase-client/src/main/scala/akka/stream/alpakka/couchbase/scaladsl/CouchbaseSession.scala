@@ -6,7 +6,7 @@ package akka.stream.alpakka.couchbase.scaladsl
 
 import akka.annotation.DoNotInherit
 import akka.dispatch.ExecutionContexts
-import akka.stream.alpakka.couchbase.impl.{CouchbaseSessionImpl, RxUtilities}
+import akka.stream.alpakka.couchbase.scaladsl.impl.{CouchbaseSessionImpl, RxUtilities}
 import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
@@ -69,7 +69,7 @@ trait CouchbaseSession {
   /**
    * Insert a document using the default write settings
    *
-   * @return A future that completes with the written document when the write completes,
+   * @return A future that completes with the written document when the write completes
    */
   def insert(document: JsonDocument): Future[JsonDocument]
 

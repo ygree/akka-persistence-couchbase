@@ -2,7 +2,7 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package akka.stream.alpakka.couchbase.impl
+package akka.stream.alpakka.couchbase.scaladsl.impl
 
 import java.util.concurrent.TimeUnit
 
@@ -17,8 +17,7 @@ import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
 import com.couchbase.client.java.{AsyncBucket, AsyncCluster}
-import rx.functions.Func1
-import rx.{Observable, RxReactiveStreams}
+import rx.RxReactiveStreams
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
