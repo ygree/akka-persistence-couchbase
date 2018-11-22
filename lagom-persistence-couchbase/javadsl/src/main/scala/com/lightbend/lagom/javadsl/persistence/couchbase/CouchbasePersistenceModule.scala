@@ -8,7 +8,7 @@ import java.net.URI
 
 import akka.actor.ActorSystem
 import akka.persistence.couchbase.CouchbaseJournalSettings
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
 import com.google.inject.Provider
 import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{
   CouchbasePersistentEntityRegistry,
@@ -24,6 +24,7 @@ import javax.inject.Inject
 import play.api.inject.{Binding, Injector, Module}
 import play.api.{Configuration, Environment}
 
+import scala.compat.java8.FutureConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Try
@@ -56,7 +57,7 @@ private[lagom] class CouchbaseProvider @Inject()(system: ActorSystem, cfg: Confi
   // that from Lagom it needs to be made public API
   // FIXME this should be the Java API of CouchbaseSession, when there is one
   lazy val couchbase: CouchbaseSession =
-    Await.result(CouchbaseSession(settings.sessionSettings, settings.bucket), 30.seconds)
+    Await.result(CouchbaseSession(settings.sessionSettings, settings.bucket).toScala, 30.seconds)
 
   override def get(): CouchbaseSession = couchbase
 }

@@ -9,12 +9,37 @@ import java.util.concurrent.CompletionStage
 
 import akka.{Done, NotUsed}
 import akka.annotation.DoNotInherit
-import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
+import akka.dispatch.ExecutionContexts
+import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
+import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => ScalaDslCouchbaseSession}
 import akka.stream.javadsl.Source
-import com.couchbase.client.java.AsyncBucket
+import com.couchbase.client.java.{AsyncBucket, Bucket}
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
+
+import scala.compat.java8.FutureConverters._
+
+object CouchbaseSession {
+
+  /**
+   * Create a session against the given bucket. The couchbase client used to connect will be created and then closed when
+   * the session is closed.
+   */
+  def apply(settings: CouchbaseSessionSettings, bucketName: String): CompletionStage[CouchbaseSession] =
+    ScalaDslCouchbaseSession
+      .apply(settings, bucketName)
+      .map(new CouchbaseSessionJavaAdapter(_).asInstanceOf[CouchbaseSession])(
+        ExecutionContexts.sameThreadExecutionContext
+      )
+      .toJava
+
+  /**
+   * Create a session against the given bucket. You are responsible for managing the lifecycle of the couchbase client
+   * that the bucket was created with.
+   */
+  def apply(bucket: Bucket): CouchbaseSession = new CouchbaseSessionJavaAdapter(ScalaDslCouchbaseSession.apply(bucket))
+}
 
 /**
  * Not for user extension
@@ -113,7 +138,7 @@ trait CouchbaseSession {
    * @param ignoreIfExist if a secondary index already exists with that name, an exception will be thrown unless this
    *                      is set to true.
    * @param fields the JSON fields to index - each can be either `String` or [com.couchbase.client.java.query.dsl.Expression]
-   * @return an {@link scala.concurrent.CompletionStage} of true if the index was/will be effectively created, false
+   * @return an {@link java.util.concurrent.CompletionStage} of true if the index was/will be effectively created, false
    *      if the index existed and ignoreIfExist is true. Completion of the CompletionStage does not guarantee the index is online
    *      and ready to be used.
    */

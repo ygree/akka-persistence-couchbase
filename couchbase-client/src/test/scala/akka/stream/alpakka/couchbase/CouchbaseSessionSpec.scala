@@ -6,26 +6,25 @@ package akka.stream.alpakka.couchbase
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.stream.alpakka.couchbase.javadsl.{CouchbaseSession, CouchbaseSessionJavaAdapter}
-import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => CouchbaseSessionScala}
+import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
 import akka.stream.javadsl.Sink
 import akka.testkit.TestKit
 import com.couchbase.client.java.bucket.BucketType
 import com.couchbase.client.java.cluster.DefaultBucketSettings
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
-import com.couchbase.client.java.query.{N1qlParams, N1qlQuery}
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.query.dsl.Expression._
+import com.couchbase.client.java.query.{N1qlParams, N1qlQuery}
 import com.couchbase.client.java.{Cluster, CouchbaseCluster}
-import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpec}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpec}
 
-import scala.concurrent.Future
-import scala.concurrent.duration._
 import scala.compat.java8.FutureConverters._
 import scala.compat.java8.OptionConverters._
+import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with BeforeAndAfterAll with Eventually {
 
@@ -58,7 +57,7 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
   bucket.bucketManager().createN1qlIndex("intvals", true, false, "intVal")
 
   // test CouchbaseSession via its Java adapter to test both in one shot
-  val session: CouchbaseSession = new CouchbaseSessionJavaAdapter(CouchbaseSessionScala(cluster.openBucket(bucketName)))
+  val session: CouchbaseSession = CouchbaseSession(cluster.openBucket(bucketName))
 
   "The couchbase session" should {
 
