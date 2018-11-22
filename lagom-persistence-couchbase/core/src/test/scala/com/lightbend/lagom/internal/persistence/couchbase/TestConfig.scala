@@ -28,12 +28,16 @@ object TestConfig {
     "akka.persistence.journal.plugin" -> "couchbase-journal.write",
     "akka.persistence.snapshot-store.plugin" -> "couchbase-journal.snapshot",
 
+    "couchbase-journal.connection.nodes" -> List("").asJava,
     "couchbase-journal.connection.username" -> "admin",
     "couchbase-journal.connection.password" -> "admin1",
 
     "couchbase-journal.write.bucket" -> "akka",
     "couchbase-journal.write.persist-to" -> "none",
     "couchbase-journal.write.replicate-to" -> "none",
+    "couchbase-journal.write.parallelism" -> new Integer(1),
+    "couchbase-journal.write.write-timeout" -> "15s",
+    "couchbase-journal.write.read-timeout" -> "15s",
 
     "couchbase-journal.snapshot.bucket" -> "akka"
   )
