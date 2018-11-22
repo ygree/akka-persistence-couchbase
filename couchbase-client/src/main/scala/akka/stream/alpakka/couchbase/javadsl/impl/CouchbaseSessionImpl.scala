@@ -16,14 +16,14 @@ import com.couchbase.client.java.AsyncBucket
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
+import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => ScalaCouchbaseSession}
 
 import scala.compat.java8.FutureConverters._
 import scala.compat.java8.OptionConverters._
 import scala.concurrent.{duration, Future}
 import scala.concurrent.duration.FiniteDuration
 
-class CouchbaseSessionImpl(delegate: akka.stream.alpakka.couchbase.scaladsl.impl.CouchbaseSessionImpl)
-    extends CouchbaseSession {
+class CouchbaseSessionImpl(delegate: ScalaCouchbaseSession) extends CouchbaseSession {
 
   override def underlying: AsyncBucket = delegate.underlying
 

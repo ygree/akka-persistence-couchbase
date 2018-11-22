@@ -6,8 +6,10 @@ package akka.stream.alpakka.couchbase
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
-import akka.stream.scaladsl.Sink
+import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.javadsl.impl.CouchbaseSessionImpl
+import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => CouchbaseSessionScala}
+import akka.stream.javadsl.Sink
 import akka.testkit.TestKit
 import com.couchbase.client.java.bucket.BucketType
 import com.couchbase.client.java.cluster.DefaultBucketSettings
@@ -23,6 +25,8 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.compat.java8.FutureConverters._
+import scala.compat.java8.OptionConverters._
 
 class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with BeforeAndAfterAll with Eventually {
 
@@ -53,7 +57,9 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
   }
   private val bucket = cluster.openBucket(bucketName)
   bucket.bucketManager().createN1qlIndex("intvals", true, false, "intVal")
-  val session = CouchbaseSession(cluster.openBucket(bucketName))
+
+  // test CouchbaseSession via its Java adapter to test both in one shot
+  val session: CouchbaseSession = new CouchbaseSessionImpl(CouchbaseSessionScala(cluster.openBucket(bucketName)))
 
   "The couchbase session" should {
 
@@ -61,11 +67,11 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       val insertObject = JsonObject.create()
       insertObject.put("intVal", 1)
 
-      val inserted = session.insert(JsonDocument.create("one", insertObject)).futureValue
+      val inserted = session.insert(JsonDocument.create("one", insertObject)).toScala.futureValue
       inserted.id() should ===("one")
       inserted.content().getInt("intVal") should ===(1)
 
-      val getResult = session.get("one").futureValue
+      val getResult = session.get("one").toScala.futureValue.asScala
       getResult should not be empty
       val getDoc: JsonDocument = getResult.get
       getDoc.id() should ===("one")
@@ -75,14 +81,14 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       upsertObject.put("intVal", 3)
       upsertObject.put("stringVal", "whoa")
 
-      session.upsert(JsonDocument.create("one", upsertObject)).futureValue
+      session.upsert(JsonDocument.create("one", upsertObject)).toScala.futureValue
 
       val query = select("*")
         .from(bucketName)
         .where(x("intVal").eq(3))
 
       val queryResult = eventually {
-        val result = session.singleResponseQuery(query).futureValue
+        val result = session.singleResponseQuery(query).toScala.futureValue.asScala
         result should not be empty
         result
       }
@@ -92,7 +98,7 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       queryObject.getInt("intVal") should be(3)
       queryObject.getString("stringVal") should be("whoa")
 
-      session.remove("one").futureValue
+      session.remove("one").toScala.futureValue
 
     }
 
@@ -101,10 +107,10 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       bucket.bucketManager().createN1qlIndex("q", true, false, "daField")
 
       Future
-        .traverse(1 to 1000) { (n) =>
+        .traverse(1 to 1000) { n =>
           val obj = JsonObject.create()
-          obj.put("daField", n: Long)
-          session.insert(JsonDocument.create(s"q-$n", obj))
+          obj.put("daField", n)
+          session.insert(JsonDocument.create(s"q-$n", obj)).toScala
         }
         .futureValue
 
@@ -117,7 +123,7 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       val query = N1qlQuery.simple(statement, queryParams)
 
       // FIXME verify backpressure somehow
-      val queryResult = session.streamedQuery(query).runWith(Sink.seq).futureValue
+      val queryResult = session.streamedQuery(query).runWith(Sink.seq, materializer).toScala.futureValue
 
       queryResult should have size 1000
     }
@@ -127,22 +133,22 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       upsertObject.put("intVal", 5)
       upsertObject.put("stringVal", "whoa")
 
-      session.upsert(JsonDocument.create("upsert-missing", upsertObject)).futureValue
-      val persisted = session.get("upsert-missing").futureValue
+      session.upsert(JsonDocument.create("upsert-missing", upsertObject)).toScala.futureValue
+      val persisted = session.get("upsert-missing").toScala.futureValue.asScala
       persisted should not be empty
       persisted.get.content().getInt("intVal") should ===(5)
     }
 
     "allow for counters" in {
-      val v1 = session.counter("c1", 1, 0).futureValue
-      val v2 = session.counter("c1", 1, 0).futureValue
+      val v1 = session.counter("c1", 1, 0).toScala.futureValue
+      val v2 = session.counter("c1", 1, 0).toScala.futureValue
       v1 should ===(0L) // starts at 0
       v2 should ===(1L)
     }
   }
 
   override protected def afterAll(): Unit = {
-    session.close().futureValue
+    session.close().toScala.futureValue
     cluster.clusterManager().removeBucket(bucketName)
     cluster.disconnect()
     TestKit.shutdownActorSystem(system)
