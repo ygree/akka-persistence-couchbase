@@ -25,6 +25,8 @@ import scala.concurrent.{duration, Future}
 
 class CouchbaseSessionJavaAdapter(delegate: ScalaCouchbaseSession) extends CouchbaseSession {
 
+  override def scalaDelegate = delegate
+
   override def underlying: AsyncBucket = delegate.underlying
 
   override def insert(document: JsonDocument): CompletionStage[JsonDocument] = delegate.insert(document).toJava

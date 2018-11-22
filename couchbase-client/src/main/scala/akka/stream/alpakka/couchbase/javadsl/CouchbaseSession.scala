@@ -49,6 +49,11 @@ trait CouchbaseSession {
   def underlying: AsyncBucket
 
   /**
+   * Internal API
+   */
+  def scalaDelegate: ScalaDslCouchbaseSession
+
+  /**
    * Insert a document using the default write settings
    *
    * @return A CompletionStage that completes with the written document when the write completes
@@ -138,9 +143,9 @@ trait CouchbaseSession {
    * @param ignoreIfExist if a secondary index already exists with that name, an exception will be thrown unless this
    *                      is set to true.
    * @param fields the JSON fields to index - each can be either `String` or [com.couchbase.client.java.query.dsl.Expression]
-   * @return an {@link java.util.concurrent.CompletionStage} of true if the index was/will be effectively created, false
-   *      if the index existed and ignoreIfExist is true. Completion of the CompletionStage does not guarantee the index is online
-   *      and ready to be used.
+   * @return an {@see java.util.concurrent.CompletionStage} of true if the index was/will be effectively created, false
+   *      if the index existed and ignoreIfExist is true. Completion of the CompletionStage does not guarantee the index
+   *      is online and ready to be used.
    */
   def createIndex(indexName: String, ignoreIfExist: Boolean, fields: AnyRef*): CompletionStage[Boolean]
 }

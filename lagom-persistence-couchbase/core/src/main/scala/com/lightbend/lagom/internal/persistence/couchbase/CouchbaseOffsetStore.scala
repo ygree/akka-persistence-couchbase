@@ -6,7 +6,6 @@ package com.lightbend.lagom.internal.persistence.couchbase
 
 import akka.Done
 import akka.actor.ActorSystem
-import akka.persistence.couchbase.AsyncCouchbaseSession
 import akka.persistence.query.{NoOffset, Offset, Sequence, TimeBasedUUID}
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.document.JsonDocument
