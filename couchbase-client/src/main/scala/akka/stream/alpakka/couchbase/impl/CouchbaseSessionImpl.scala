@@ -2,7 +2,7 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package akka.stream.alpakka.couchbase.scaladsl.impl
+package akka.stream.alpakka.couchbase.impl
 
 import java.util.concurrent.TimeUnit
 

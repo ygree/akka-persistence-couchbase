@@ -2,7 +2,8 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package akka.stream.alpakka.couchbase.scaladsl.impl
+package akka.stream.alpakka.couchbase.impl
+
 import akka.annotation.InternalApi
 import akka.stream.alpakka.couchbase.CouchbaseResponseException
 import com.couchbase.client.java.document.json.JsonObject

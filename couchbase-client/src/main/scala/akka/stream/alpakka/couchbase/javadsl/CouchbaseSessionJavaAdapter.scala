@@ -2,7 +2,8 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package akka.stream.alpakka.couchbase.javadsl.impl
+package akka.stream.alpakka.couchbase.javadsl
+
 import java.time.Duration
 import java.util.Optional
 import java.util.concurrent.CompletionStage
@@ -10,20 +11,19 @@ import java.util.concurrent.CompletionStage
 import akka.Done
 import akka.dispatch.ExecutionContexts
 import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
-import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => ScalaCouchbaseSession}
 import akka.stream.javadsl.Source
 import com.couchbase.client.java.AsyncBucket
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
-import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => ScalaCouchbaseSession}
 
 import scala.compat.java8.FutureConverters._
 import scala.compat.java8.OptionConverters._
-import scala.concurrent.{duration, Future}
 import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{duration, Future}
 
-class CouchbaseSessionImpl(delegate: ScalaCouchbaseSession) extends CouchbaseSession {
+class CouchbaseSessionJavaAdapter(delegate: ScalaCouchbaseSession) extends CouchbaseSession {
 
   override def underlying: AsyncBucket = delegate.underlying
 

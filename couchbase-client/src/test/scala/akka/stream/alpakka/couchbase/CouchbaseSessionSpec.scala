@@ -6,8 +6,7 @@ package akka.stream.alpakka.couchbase
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
-import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
-import akka.stream.alpakka.couchbase.javadsl.impl.CouchbaseSessionImpl
+import akka.stream.alpakka.couchbase.javadsl.{CouchbaseSession, CouchbaseSessionJavaAdapter}
 import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => CouchbaseSessionScala}
 import akka.stream.javadsl.Sink
 import akka.testkit.TestKit
@@ -59,7 +58,7 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
   bucket.bucketManager().createN1qlIndex("intvals", true, false, "intVal")
 
   // test CouchbaseSession via its Java adapter to test both in one shot
-  val session: CouchbaseSession = new CouchbaseSessionImpl(CouchbaseSessionScala(cluster.openBucket(bucketName)))
+  val session: CouchbaseSession = new CouchbaseSessionJavaAdapter(CouchbaseSessionScala(cluster.openBucket(bucketName)))
 
   "The couchbase session" should {
 
