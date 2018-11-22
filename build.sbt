@@ -1,4 +1,3 @@
-import sbt.Keys.{name, publishArtifact, testOptions}
 
 def common: Seq[Setting[_]] = Seq(
   organization := "com.lightbend.akka",

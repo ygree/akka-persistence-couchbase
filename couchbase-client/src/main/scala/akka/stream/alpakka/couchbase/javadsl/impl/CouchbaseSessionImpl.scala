@@ -19,7 +19,7 @@ import com.couchbase.client.java.query.{N1qlQuery, Statement}
 
 import scala.compat.java8.FutureConverters._
 import scala.compat.java8.OptionConverters._
-import scala.concurrent.duration
+import scala.concurrent.{duration, Future}
 import scala.concurrent.duration.FiniteDuration
 
 class CouchbaseSessionImpl(delegate: akka.stream.alpakka.couchbase.scaladsl.impl.CouchbaseSessionImpl)
@@ -35,16 +35,10 @@ class CouchbaseSessionImpl(delegate: akka.stream.alpakka.couchbase.scaladsl.impl
   ): CompletionStage[JsonDocument] = delegate.insert(document, writeSettings).toJava
 
   override def get(id: String): CompletionStage[Optional[JsonDocument]] =
-    delegate
-      .get(id)
-      .map(_.asJava)(ExecutionContexts.sameThreadExecutionContext)
-      .toJava
+    futureOptToJava(delegate.get(id))
 
   override def get(id: String, timeout: Duration): CompletionStage[Optional[JsonDocument]] =
-    delegate
-      .get(id, FiniteDuration.apply(timeout.toNanos, duration.NANOSECONDS))
-      .map(_.asJava)(ExecutionContexts.sameThreadExecutionContext)
-      .toJava
+    futureOptToJava(delegate.get(id, FiniteDuration.apply(timeout.toNanos, duration.NANOSECONDS)))
 
   override def upsert(document: JsonDocument): CompletionStage[JsonDocument] = delegate.upsert(document).toJava
 
@@ -63,16 +57,10 @@ class CouchbaseSessionImpl(delegate: akka.stream.alpakka.couchbase.scaladsl.impl
     delegate.streamedQuery(query).asJava
 
   override def singleResponseQuery(query: Statement): CompletionStage[Optional[JsonObject]] =
-    delegate
-      .singleResponseQuery(query)
-      .map(_.asJava)(ExecutionContexts.sameThreadExecutionContext)
-      .toJava
+    futureOptToJava(delegate.singleResponseQuery(query))
 
   override def singleResponseQuery(query: N1qlQuery): CompletionStage[Optional[JsonObject]] =
-    delegate
-      .singleResponseQuery(query)
-      .map(_.asJava)(ExecutionContexts.sameThreadExecutionContext)
-      .toJava
+    futureOptToJava(delegate.singleResponseQuery(query))
 
   override def counter(id: String, delta: Long, initial: Long): CompletionStage[Long] =
     delegate.counter(id, delta, initial).toJava
@@ -88,4 +76,7 @@ class CouchbaseSessionImpl(delegate: akka.stream.alpakka.couchbase.scaladsl.impl
 
   override def createIndex(indexName: String, ignoreIfExist: Boolean, fields: AnyRef*): CompletionStage[Boolean] =
     delegate.createIndex(indexName, ignoreIfExist, fields).toJava
+
+  private def futureOptToJava[T](future: Future[Option[T]]): CompletionStage[Optional[T]] =
+    future.map(_.asJava)(ExecutionContexts.sameThreadExecutionContext).toJava
 }
