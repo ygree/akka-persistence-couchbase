@@ -10,14 +10,13 @@ import akka.pattern.AskTimeoutException;
 import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.CouchbaseCluster;
 import com.couchbase.client.java.query.N1qlQuery;
+import com.lightbend.lagom.internal.persistence.couchbase.TestConfig;
 import com.lightbend.lagom.javadsl.persistence.PersistentEntity.InvalidCommandException;
 import com.lightbend.lagom.javadsl.persistence.PersistentEntity.UnhandledCommandException;
 import com.lightbend.lagom.javadsl.persistence.TestEntity.Cmd;
 import com.lightbend.lagom.javadsl.persistence.TestEntity.Evt;
 import com.lightbend.lagom.javadsl.persistence.TestEntity.State;
-import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbasePersistenceSpec;
 import com.typesafe.config.Config;
-import com.typesafe.config.ConfigFactory;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -48,17 +47,12 @@ public class PersistentEntityRefTest {
 
   @BeforeClass
   public static void setup() {
-    Config config = ConfigFactory.parseString(
-        "akka.actor.provider = akka.cluster.ClusterActorRefProvider \n" +
-        "akka.remote.netty.tcp.port = 0 \n" +
-        "akka.remote.netty.tcp.hostname = 127.0.0.1 \n" +
-        "akka.loglevel = INFO \n" +
-        "akka.cluster.sharding.distributed-data.durable.keys = [] \n"
-        ).withFallback(CouchbasePersistenceSpec.couchbaseConfig());
+    Config config = TestConfig.clusterConfig()
+        .withFallback(TestConfig.persistenceConfig());
 
     application = new GuiceApplicationBuilder()
-            .configure(config)
-            .build();
+        .configure(config)
+        .build();
     injector = application.injector();
 
     ActorSystem system = injector.instanceOf(ActorSystem.class);

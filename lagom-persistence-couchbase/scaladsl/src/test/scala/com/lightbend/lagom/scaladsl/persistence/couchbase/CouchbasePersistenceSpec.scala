@@ -8,36 +8,12 @@ import akka.actor.setup.ActorSystemSetup
 import akka.actor.{ActorSystem, BootstrapSetup}
 import akka.cluster.Cluster
 import akka.persistence.couchbase.CouchbaseBucketSetup
+import com.lightbend.lagom.internal.persistence.couchbase.TestConfig
 import com.lightbend.lagom.internal.persistence.testkit.AwaitPersistenceInit.awaitPersistenceInit
 import com.lightbend.lagom.internal.persistence.testkit.PersistenceTestConfig._
 import com.lightbend.lagom.persistence.{ActorSystemSpec, PersistenceSpec}
 import com.lightbend.lagom.scaladsl.playjson.JsonSerializerRegistry
 import com.typesafe.config.{Config, ConfigFactory}
-
-object CouchbasePersistenceSpec {
-
-  def couchbaseConfig(): Config =
-    ConfigFactory.parseString("""
-      |akka.persistence.journal.plugin = "couchbase-journal.write"
-      |akka.persistence.snapshot-store.plugin = "couchbase-journal.snapshot"
-      |
-      |couchbase-journal {
-      |  connection {
-      |    nodes = ["localhost"]
-      |    username = "admin"
-      |    password = "admin1"
-      |  }
-      |  write.bucket = "akka"
-      |  write.parallelism = 1
-      |  write.persist-to = none
-      |  write.replicate-to = none
-      |  write.write-timeout = 15s
-      |  write.read-timeout = 15s
-      |  snapshot.bucket = "akka"
-      |}
-    """.stripMargin)
-
-}
 
 class CouchbasePersistenceSpec private (system: ActorSystem) extends ActorSystemSpec(system) with CouchbaseBucketSetup {
 
@@ -48,7 +24,7 @@ class CouchbasePersistenceSpec private (system: ActorSystem) extends ActorSystem
         ActorSystemSetup(
           BootstrapSetup(
             config
-              .withFallback(CouchbasePersistenceSpec.couchbaseConfig())
+              .withFallback(TestConfig.persistenceConfig())
               .withFallback(ClusterConfig)
           ),
           JsonSerializerRegistry.serializationSetupFor(jsonSerializerRegistry)

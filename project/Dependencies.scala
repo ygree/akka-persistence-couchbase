@@ -81,16 +81,16 @@ object Dependencies {
   )
 
   val `lagom-persistence-couchbase-core` = Seq(
-    slf4jApi,
     lagomPersistenceCore,
+    slf4jApi,
     scalaTest
   )
 
   val `lagom-persistence-couchbase-scaladsl` = Seq(
     lagomPersistenceCore,
     lagomPersistenceScalaDsl,
-    scalaTest,
-    lagomScalaDslApi
+    lagomScalaDslApi,
+    scalaTest
   )
 
   val `lagom-persistence-couchbase-javadsl` = Seq(

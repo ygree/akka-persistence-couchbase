@@ -13,6 +13,7 @@ import akka.pattern.AskTimeoutException
 import akka.persistence.couchbase.CouchbaseBucketSetup
 import akka.stream.{ActorMaterializer, Materializer}
 import akka.testkit.TestKit
+import com.lightbend.lagom.internal.persistence.couchbase.TestConfig
 import com.lightbend.lagom.internal.persistence.testkit.AwaitPersistenceInit.awaitPersistenceInit
 import com.lightbend.lagom.scaladsl.api.ServiceLocator
 import com.lightbend.lagom.scaladsl.api.ServiceLocator.NoServiceLocator
@@ -46,13 +47,9 @@ class PersistentEntityRefSpec
 
   override implicit val patienceConfig = PatienceConfig(5.seconds, 150.millis)
 
-  private val config: Config = ConfigFactory.parseString("""
-      akka.actor.provider = akka.cluster.ClusterActorRefProvider
-      akka.remote.netty.tcp.port = 0
-      akka.remote.netty.tcp.hostname = 127.0.0.1
-      akka.loglevel = INFO
-      akka.cluster.sharding.distributed-data.durable.keys = []
-  """).withFallback(CouchbasePersistenceSpec.couchbaseConfig())
+  private val config: Config = TestConfig
+    .clusterConfig()
+    .withFallback(TestConfig.persistenceConfig())
 
   private val system: ActorSystem = ActorSystem(
     "PersistentEntityRefSpec",

@@ -1,4 +1,3 @@
-
 def common: Seq[Setting[_]] = Seq(
   organization := "com.lightbend.akka",
   organizationName := "Lightbend Inc.",
