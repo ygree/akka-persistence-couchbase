@@ -22,7 +22,6 @@ private[lagom] class CouchbaseReadSideImpl @Inject()(
     system: ActorSystem,
     couchbaseSession: CouchbaseSession,
     offsetStore: CouchbaseOffsetStore,
-    readSide: ReadSideImpl,
     injector: Injector
 ) extends CouchbaseReadSide {
   import akka.dispatch.MessageDispatcher

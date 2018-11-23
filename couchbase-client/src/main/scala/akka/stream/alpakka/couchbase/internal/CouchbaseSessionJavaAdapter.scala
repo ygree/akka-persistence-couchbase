@@ -29,7 +29,7 @@ import scala.concurrent.{duration, Future}
  * INTERNAL API
  */
 @InternalApi
-private[couchbase] final class CouchbaseSessionJavaAdapter(delegate: ScalaCouchbaseSession) extends CouchbaseSession {
+final class CouchbaseSessionJavaAdapter(delegate: ScalaCouchbaseSession) extends CouchbaseSession {
 
   override def scalaDelegate: ScalaCouchbaseSession = delegate
 
