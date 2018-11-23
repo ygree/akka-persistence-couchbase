@@ -30,7 +30,7 @@ private[lagom] final class CouchbaseReadSideImpl(system: ActorSystem,
 
   override def builder[Event <: AggregateEvent[Event]](eventProcessorId: String): ReadSideHandlerBuilder[Event] =
     new ReadSideHandlerBuilder[Event] {
-      import CouchbaseAutoReadSideHandler.Handler
+      import CouchbaseReadSideHandler.Handler
       private var handlers = Map.empty[Class[_ <: Event], Handler[Event]]
 
       override def setEventHandler[E <: Event: ClassTag](
@@ -42,6 +42,6 @@ private[lagom] final class CouchbaseReadSideImpl(system: ActorSystem,
       }
 
       override def build(): ReadSideHandler[Event] =
-        new CouchbaseAutoReadSideHandler[Event](couchbase, offsetStore, handlers, eventProcessorId, dispatcher)
+        new CouchbaseReadSideHandler[Event](couchbase, offsetStore, handlers, eventProcessorId, dispatcher)
     }
 }

@@ -15,7 +15,7 @@ import scala.reflect.ClassTag
 /**
  * Couchbase read side support.
  *
- * This should be used to build and register readside
+ * This should be used to build and register a read side processor.
  */
 object CouchbaseReadSide {
 
@@ -30,7 +30,7 @@ object CouchbaseReadSide {
      * This variant allows for offsets to be consumed as well as their events.
      *
      * @tparam E The event type to handle.
-     * @param handler    The function to handle the events.
+     * @param handler The function to handle the events.
      * @return This builder for fluent invocation
      */
     def setEventHandler[E <: Event: ClassTag](

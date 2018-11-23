@@ -142,8 +142,8 @@ trait CouchbaseSession {
    * @param indexName the name of the index.
    * @param ignoreIfExist if a secondary index already exists with that name, an exception will be thrown unless this
    *                      is set to true.
-   * @param fields the JSON fields to index - each can be either `String` or [com.couchbase.client.java.query.dsl.Expression]
-   * @return an {@see java.util.concurrent.CompletionStage} of true if the index was/will be effectively created, false
+   * @param fields the JSON fields to index - each can be either `String` or [[com.couchbase.client.java.query.dsl.Expression]]
+   * @return an [[java.util.concurrent.CompletionStage]] of true if the index was/will be effectively created, false
    *      if the index existed and ignoreIfExist is true. Completion of the CompletionStage does not guarantee the index
    *      is online and ready to be used.
    */

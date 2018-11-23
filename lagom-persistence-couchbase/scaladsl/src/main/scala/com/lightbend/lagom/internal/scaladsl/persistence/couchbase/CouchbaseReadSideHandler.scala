@@ -4,7 +4,6 @@
 
 package com.lightbend.lagom.internal.scaladsl.persistence.couchbase
 
-import akka.persistence.couchbase.AsyncCouchbaseSession
 import akka.persistence.query.Offset
 import akka.stream.ActorAttributes
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
@@ -21,16 +20,51 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
  * Internal API
  */
-private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEvent[Event], Handler](
+private[couchbase] object CouchbaseReadSideHandler {
+
+  type Handler[Event] = EventStreamElement[_ <: Event] => Future[immutable.Seq[CouchbaseAction]]
+
+  def emptyHandler[Event]: Handler[Event] =
+    _ => Future.successful(immutable.Seq.empty[CouchbaseAction])
+}
+
+/**
+ * Internal API
+ */
+private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[Event]](
     couchbase: CouchbaseSession,
-    handlers: Map[Class[_ <: Event], Handler],
+    offsetStore: CouchbaseOffsetStore,
+    handlers: Map[Class[_ <: Event], CouchbaseReadSideHandler.Handler[Event]],
+    readProcessorId: String,
     dispatcher: String
 )(implicit ec: ExecutionContext)
     extends ReadSideHandler[Event] {
 
+  import CouchbaseReadSideHandler.Handler
+
   private val log = LoggerFactory.getLogger(this.getClass)
 
-  protected def invoke(handler: Handler, event: EventStreamElement[Event]): Future[immutable.Seq[CouchbaseAction]]
+  @volatile
+  private var offsetDao: CouchbaseOffsetDao = _
+
+  protected def invoke(handler: Handler[Event],
+                       element: EventStreamElement[Event]): Future[immutable.Seq[CouchbaseAction]] =
+    for {
+      statements <- handler
+        .asInstanceOf[EventStreamElement[Event] => Future[immutable.Seq[CouchbaseAction]]]
+        .apply(element)
+    } yield statements :+ offsetDao.bindSaveOffset(element.offset)
+
+  protected def offsetStatement(offset: Offset): immutable.Seq[CouchbaseAction] =
+    immutable.Seq(offsetDao.bindSaveOffset(offset))
+
+  override def prepare(tag: AggregateEventTag[Event]): Future[Offset] =
+    for {
+      dao <- offsetStore.prepare(readProcessorId, tag.tag)
+    } yield {
+      offsetDao = dao
+      dao.loadedOffset
+    }
 
   override def handle(): Flow[EventStreamElement[Event], Done, NotUsed] = {
 
@@ -48,7 +82,7 @@ private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEve
             // fallback to empty handler if none
             {
               if (log.isDebugEnabled()) log.debug("Unhandled event [{}]", eventClass.getName)
-              CouchbaseAutoReadSideHandler.emptyHandler.asInstanceOf[Handler]
+              CouchbaseReadSideHandler.emptyHandler.asInstanceOf[Handler[Event]]
             }
           )
 
@@ -57,54 +91,4 @@ private[couchbase] abstract class CouchbaseReadSideHandler[Event <: AggregateEve
       }
       .withAttributes(ActorAttributes.dispatcher(dispatcher))
   }
-}
-
-/**
- * Internal API
- */
-private[couchbase] object CouchbaseAutoReadSideHandler {
-
-  type Handler[Event] = EventStreamElement[_ <: Event] => Future[immutable.Seq[CouchbaseAction]]
-
-  def emptyHandler[Event]: Handler[Event] =
-    _ => Future.successful(immutable.Seq.empty[CouchbaseAction])
-}
-
-/**
- * Internal API
- */
-private[couchbase] final class CouchbaseAutoReadSideHandler[Event <: AggregateEvent[Event]](
-    couchbase: CouchbaseSession,
-    offsetStore: CouchbaseOffsetStore,
-    handlers: Map[Class[_ <: Event], CouchbaseAutoReadSideHandler.Handler[Event]],
-    readProcessorId: String,
-    dispatcher: String
-)(implicit ec: ExecutionContext)
-    extends CouchbaseReadSideHandler[Event, CouchbaseAutoReadSideHandler.Handler[Event]](couchbase,
-                                                                                         handlers,
-                                                                                         dispatcher) {
-
-  import CouchbaseAutoReadSideHandler.Handler
-
-  @volatile
-  private var offsetDao: CouchbaseOffsetDao = _
-
-  override protected def invoke(handler: Handler[Event],
-                                element: EventStreamElement[Event]): Future[immutable.Seq[CouchbaseAction]] =
-    for {
-      statements <- handler
-        .asInstanceOf[EventStreamElement[Event] => Future[immutable.Seq[CouchbaseAction]]]
-        .apply(element)
-    } yield statements :+ offsetDao.bindSaveOffset(element.offset)
-
-  protected def offsetStatement(offset: Offset): immutable.Seq[CouchbaseAction] =
-    immutable.Seq(offsetDao.bindSaveOffset(offset))
-
-  override def prepare(tag: AggregateEventTag[Event]): Future[Offset] =
-    for {
-      dao <- offsetStore.prepare(readProcessorId, tag.tag)
-    } yield {
-      offsetDao = dao
-      dao.loadedOffset
-    }
 }
