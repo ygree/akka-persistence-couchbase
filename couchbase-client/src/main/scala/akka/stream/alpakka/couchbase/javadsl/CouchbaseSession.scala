@@ -53,6 +53,8 @@ abstract class CouchbaseSession {
 
   def underlying: AsyncBucket
 
+  def scalaDelegate: ScalaDslCouchbaseSession
+
   /**
    * Insert a document using the default write settings
    *
@@ -148,12 +150,4 @@ abstract class CouchbaseSession {
    *      is online and ready to be used.
    */
   def createIndex(indexName: String, ignoreIfExist: Boolean, fields: AnyRef*): CompletionStage[Boolean]
-
-  /**
-   * INTERNAL API
-   *
-   * TODO: should be private but it's used from the lagom module in
-   * [[com.lightbend.lagom.internal.javadsl.persistence.couchbase.JavadslCouchbaseOffsetStore]]
-   */
-  @InternalApi def scalaDelegate: ScalaDslCouchbaseSession
 }
