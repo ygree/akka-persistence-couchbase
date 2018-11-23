@@ -3,20 +3,22 @@
  */
 
 package akka.stream.alpakka.couchbase.javadsl
+
 import java.time.Duration
 import java.util.Optional
 import java.util.concurrent.CompletionStage
 
-import akka.{Done, NotUsed}
-import akka.annotation.DoNotInherit
+import akka.annotation.{DoNotInherit, InternalApi}
 import akka.dispatch.ExecutionContexts
-import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
+import akka.stream.alpakka.couchbase.internal.CouchbaseSessionJavaAdapter
 import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => ScalaDslCouchbaseSession}
+import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
 import akka.stream.javadsl.Source
-import com.couchbase.client.java.{AsyncBucket, Bucket}
+import akka.{Done, NotUsed}
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
+import com.couchbase.client.java.{AsyncBucket, Bucket}
 
 import scala.compat.java8.FutureConverters._
 
@@ -26,7 +28,7 @@ object CouchbaseSession {
    * Create a session against the given bucket. The couchbase client used to connect will be created and then closed when
    * the session is closed.
    */
-  def apply(settings: CouchbaseSessionSettings, bucketName: String): CompletionStage[CouchbaseSession] =
+  def create(settings: CouchbaseSessionSettings, bucketName: String): CompletionStage[CouchbaseSession] =
     ScalaDslCouchbaseSession
       .apply(settings, bucketName)
       .map(new CouchbaseSessionJavaAdapter(_).asInstanceOf[CouchbaseSession])(
@@ -38,20 +40,18 @@ object CouchbaseSession {
    * Create a session against the given bucket. You are responsible for managing the lifecycle of the couchbase client
    * that the bucket was created with.
    */
-  def apply(bucket: Bucket): CouchbaseSession = new CouchbaseSessionJavaAdapter(ScalaDslCouchbaseSession.apply(bucket))
+  def create(bucket: Bucket): CouchbaseSession = new CouchbaseSessionJavaAdapter(ScalaDslCouchbaseSession.apply(bucket))
 }
 
 /**
  * Not for user extension
+ *
+ * abstract class, otherwise static forwarders are missing for companion object if building with Scala 2.11
  */
 @DoNotInherit
-trait CouchbaseSession {
-  def underlying: AsyncBucket
+abstract class CouchbaseSession {
 
-  /**
-   * Internal API
-   */
-  def scalaDelegate: ScalaDslCouchbaseSession
+  def underlying: AsyncBucket
 
   /**
    * Insert a document using the default write settings
@@ -148,4 +148,12 @@ trait CouchbaseSession {
    *      is online and ready to be used.
    */
   def createIndex(indexName: String, ignoreIfExist: Boolean, fields: AnyRef*): CompletionStage[Boolean]
+
+  /**
+   * INTERNAL API
+   *
+   * TODO: should be private but it's used from the lagom module in
+   * [[com.lightbend.lagom.internal.javadsl.persistence.couchbase.JavadslCouchbaseOffsetStore]]
+   */
+  @InternalApi def scalaDelegate: ScalaDslCouchbaseSession
 }

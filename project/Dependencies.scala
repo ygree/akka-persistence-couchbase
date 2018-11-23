@@ -69,6 +69,8 @@ object Dependencies {
     couchbaseDcpClient,
     rxJavaReactiveStreams,
     scalaTest,
+    junit,
+    junitInterface,
     logback
   )
 

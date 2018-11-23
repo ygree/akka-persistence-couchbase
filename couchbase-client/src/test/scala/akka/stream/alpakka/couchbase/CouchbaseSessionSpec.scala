@@ -57,7 +57,7 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
   bucket.bucketManager().createN1qlIndex("intvals", true, false, "intVal")
 
   // test CouchbaseSession via its Java adapter to test both in one shot
-  val session: CouchbaseSession = CouchbaseSession(cluster.openBucket(bucketName))
+  val session: CouchbaseSession = CouchbaseSession.create(cluster.openBucket(bucketName))
 
   "The couchbase session" should {
 
@@ -97,7 +97,6 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       queryObject.getString("stringVal") should be("whoa")
 
       session.remove("one").toScala.futureValue
-
     }
 
     "stream query results" in {
