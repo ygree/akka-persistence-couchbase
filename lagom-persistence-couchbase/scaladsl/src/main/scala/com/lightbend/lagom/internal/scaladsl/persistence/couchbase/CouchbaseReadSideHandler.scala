@@ -9,7 +9,7 @@ import akka.stream.ActorAttributes
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Flow
 import akka.{Done, NotUsed}
-import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseAction, CouchbaseOffsetDao, CouchbaseOffsetStore}
+import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseOffsetDao, CouchbaseOffsetStore}
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
 import com.lightbend.lagom.scaladsl.persistence._
 import org.slf4j.LoggerFactory
@@ -21,6 +21,7 @@ import scala.concurrent.{ExecutionContext, Future}
  * Internal API
  */
 private[couchbase] object CouchbaseReadSideHandler {
+  import com.lightbend.lagom.scaladsl.persistence.couchbase.CouchbaseAction
 
   type Handler[Event] = EventStreamElement[_ <: Event] => Future[immutable.Seq[CouchbaseAction]]
 
@@ -41,6 +42,7 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
     extends ReadSideHandler[Event] {
 
   import CouchbaseReadSideHandler.Handler
+  import com.lightbend.lagom.scaladsl.persistence.couchbase.CouchbaseAction
 
   private val log = LoggerFactory.getLogger(this.getClass)
 
@@ -50,9 +52,7 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
   protected def invoke(handler: Handler[Event],
                        element: EventStreamElement[Event]): Future[immutable.Seq[CouchbaseAction]] =
     for {
-      statements <- handler
-        .asInstanceOf[EventStreamElement[Event] => Future[immutable.Seq[CouchbaseAction]]]
-        .apply(element)
+      statements <- handler.apply(element)
     } yield statements :+ offsetDao.bindSaveOffset(element.offset)
 
   override def prepare(tag: AggregateEventTag[Event]): Future[Offset] =

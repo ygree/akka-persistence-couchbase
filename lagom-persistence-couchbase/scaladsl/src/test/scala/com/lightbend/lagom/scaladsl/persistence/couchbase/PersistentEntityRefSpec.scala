@@ -26,7 +26,7 @@ import com.lightbend.lagom.scaladsl.persistence.{
   TestEntitySerializerRegistry
 }
 import com.lightbend.lagom.scaladsl.playjson.JsonSerializerRegistry
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.Config
 import org.scalactic.TypeCheckedTripleEquals
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.concurrent.ScalaFutures

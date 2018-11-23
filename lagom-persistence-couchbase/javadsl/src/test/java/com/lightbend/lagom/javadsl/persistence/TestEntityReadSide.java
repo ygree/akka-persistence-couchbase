@@ -9,7 +9,7 @@ import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession;
 import com.couchbase.client.java.document.JsonDocument;
 import com.couchbase.client.java.document.json.JsonObject;
 import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseReadSide;
-import com.lightbend.lagom.javadsl.persistence.couchbase.JavaDslCouchbaseAction;
+import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseAction;
 import org.pcollections.PSequence;
 
 import javax.inject.Inject;
@@ -52,7 +52,7 @@ public class TestEntityReadSide {
           .build();
     }
 
-    private CompletionStage<List<JavaDslCouchbaseAction>> updateCount(TestEntity.Appended event) {
+    private CompletionStage<List<CouchbaseAction>> updateCount(TestEntity.Appended event) {
       return CompletableFuture.completedFuture(Collections.singletonList(session ->
           getCount(session, event.getEntityId()).thenComposeAsync(count -> {
             JsonObject content = JsonObject.create().put("count", count + 1);

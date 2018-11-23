@@ -4,7 +4,6 @@
 
 package com.lightbend.lagom.javadsl.persistence.couchbase;
 
-import com.lightbend.lagom.javadsl.persistence.couchbase.JavaDslCouchbaseAction;
 import com.lightbend.lagom.javadsl.persistence.AggregateEvent;
 import com.lightbend.lagom.javadsl.persistence.ReadSideProcessor;
 
@@ -39,7 +38,7 @@ public interface CouchbaseReadSide {
      * @param handler    The function to handle the events.
      * @return This builder for fluent invocation
      */
-    <E extends Event> ReadSideHandlerBuilder<Event> setEventHandler(Class<E> eventClass, Function<E, CompletionStage<List<JavaDslCouchbaseAction>>> handler);
+    <E extends Event> ReadSideHandlerBuilder<Event> setEventHandler(Class<E> eventClass, Function<E, CompletionStage<List<CouchbaseAction>>> handler);
 
     /**
      * Build the read side handler.

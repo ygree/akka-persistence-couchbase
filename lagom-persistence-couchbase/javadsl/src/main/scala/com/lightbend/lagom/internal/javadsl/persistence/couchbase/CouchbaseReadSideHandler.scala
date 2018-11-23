@@ -14,7 +14,9 @@ import akka.stream.ActorAttributes
 import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
 import akka.stream.javadsl.Flow
 import com.lightbend.lagom.internal.javadsl.persistence.OffsetAdapter
-import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseAction, CouchbaseOffsetDao, CouchbaseOffsetStore}
+import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseOffsetDao, CouchbaseOffsetStore}
+import com.lightbend.lagom.scaladsl.persistence.couchbase.{CouchbaseAction => ScalaDslCouchbaseAction}
+import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseAction
 import com.lightbend.lagom.javadsl.persistence.ReadSideProcessor.ReadSideHandler
 import com.lightbend.lagom.javadsl.persistence.{AggregateEvent, AggregateEventTag, Offset}
 import org.pcollections.TreePVector
@@ -28,12 +30,12 @@ import scala.concurrent.{ExecutionContext, Future}
  * Internal API
  */
 private[couchbase] object CouchbaseReadSideHandler {
-  import com.lightbend.lagom.javadsl.persistence.couchbase.JavaDslCouchbaseAction
+  import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseAction
 
-  type Handler[Event] = (_ <: Event, Offset) => CompletionStage[JList[JavaDslCouchbaseAction]]
+  type Handler[Event] = (_ <: Event, Offset) => CompletionStage[JList[CouchbaseAction]]
 
   def emptyHandler[Event, E <: Event]: Handler[Event] =
-    (_: E, _: Offset) => Future.successful(util.Collections.emptyList[JavaDslCouchbaseAction]()).toJava
+    (_: E, _: Offset) => Future.successful(util.Collections.emptyList[CouchbaseAction]()).toJava
 }
 
 import CouchbaseReadSideHandler.Handler
@@ -42,15 +44,13 @@ import CouchbaseReadSideHandler.Handler
  * Internal API
  */
 private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[Event]](
-    couchbase: CouchbaseSession,
+    couchbaseSession: CouchbaseSession,
     offsetStore: CouchbaseOffsetStore,
     handlers: Map[Class[_ <: Event], Handler[Event]],
     readProcessorId: String,
     dispatcher: String
 )(implicit ec: ExecutionContext)
     extends ReadSideHandler[Event] {
-
-  import com.lightbend.lagom.javadsl.persistence.couchbase.JavaDslCouchbaseAction
 
   private val log = LoggerFactory.getLogger(this.getClass)
 
@@ -59,21 +59,29 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
 
   protected def invoke(handler: Handler[Event],
                        event: Event,
-                       offset: Offset): CompletionStage[JList[JavaDslCouchbaseAction]] = {
+                       offset: Offset): CompletionStage[JList[CouchbaseAction]] = {
     val couchbaseActions = for {
       handlerActions <- handler
-        .asInstanceOf[(Event, Offset) => CompletionStage[JList[JavaDslCouchbaseAction]]]
+        .asInstanceOf[(Event, Offset) => CompletionStage[JList[CouchbaseAction]]]
         .apply(event, offset)
         .toScala
     } yield {
       val akkaOffset = OffsetAdapter.dslOffsetToOffset(offset)
       TreePVector
         .from(handlerActions)
-        .plus(JavaDslCouchbaseAction(offsetDao.bindSaveOffset(akkaOffset)))
-        .asInstanceOf[JList[JavaDslCouchbaseAction]]
+        .plus(fromScalaDslCouchbaseAction(offsetDao.bindSaveOffset(akkaOffset)))
+        .asInstanceOf[JList[CouchbaseAction]]
     }
     couchbaseActions.toJava
   }
+
+  private def fromScalaDslCouchbaseAction(
+      action: ScalaDslCouchbaseAction
+  )(implicit ec: ExecutionContext): CouchbaseAction =
+    new CouchbaseAction {
+      override def execute(ab: CouchbaseSession): CompletionStage[Done] =
+        action.execute(ab.asScala, ec).toJava
+    }
 
   override def prepare(tag: AggregateEventTag[Event]): CompletionStage[Offset] =
     (for {
@@ -85,8 +93,8 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
 
   override def handle(): Flow[Pair[Event, Offset], Done, _] = {
 
-    def executeStatements(statements: JList[JavaDslCouchbaseAction]): Future[Done] =
-      Future.traverse(statements.asScala)(a => a.execute(couchbase).toScala).map(_ => Done)
+    def executeStatements(statements: JList[CouchbaseAction]): Future[Done] =
+      Future.traverse(statements.asScala)(a => a.execute(couchbaseSession).toScala).map(_ => Done)
 
     akka.stream.scaladsl
       .Flow[Pair[Event, Offset]]
