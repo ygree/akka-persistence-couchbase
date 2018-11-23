@@ -55,9 +55,6 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
         .apply(element)
     } yield statements :+ offsetDao.bindSaveOffset(element.offset)
 
-  protected def offsetStatement(offset: Offset): immutable.Seq[CouchbaseAction] =
-    immutable.Seq(offsetDao.bindSaveOffset(offset))
-
   override def prepare(tag: AggregateEventTag[Event]): Future[Offset] =
     for {
       dao <- offsetStore.prepare(readProcessorId, tag.tag)

@@ -12,9 +12,14 @@ import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
 import com.google.inject.Provider
 import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{
   CouchbasePersistentEntityRegistry,
+  CouchbaseReadSideImpl,
   JavadslCouchbaseOffsetStore
 }
-import com.lightbend.lagom.internal.persistence.couchbase.{ServiceLocatorAdapter, ServiceLocatorHolder}
+import com.lightbend.lagom.internal.persistence.couchbase.{
+  CouchbaseOffsetStore,
+  ServiceLocatorAdapter,
+  ServiceLocatorHolder
+}
 import com.lightbend.lagom.javadsl.api.ServiceLocator
 import com.lightbend.lagom.javadsl.persistence.PersistentEntityRegistry
 import com.lightbend.lagom.spi.persistence.OffsetStore
@@ -38,12 +43,11 @@ class CouchbasePersistenceModule extends Module {
     bind[CouchbasePersistenceModule.InitServiceLocatorHolder].toSelf.eagerly(),
     bind[PersistentEntityRegistry].to[CouchbasePersistentEntityRegistry],
     bind[CouchbaseSession].toProvider[CouchbaseProvider],
+    bind[CouchbaseReadSide].to[CouchbaseReadSideImpl],
     //TODO: add other modules similar to Cassandra
-    //    bind[CassandraSession].toSelf,
-    //    bind[CassandraReadSide].to[CassandraReadSideImpl],
     //    bind[CassandraReadSideSettings].toSelf,
-    //    bind[CassandraOffsetStore].to[JavadslCassandraOffsetStore],
-    bind[OffsetStore].to(bind[JavadslCouchbaseOffsetStore])
+    bind[CouchbaseOffsetStore].to(bind[JavadslCouchbaseOffsetStore]),
+    bind[OffsetStore].to(bind[CouchbaseOffsetStore])
   )
 
 }

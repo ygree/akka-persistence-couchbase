@@ -21,14 +21,14 @@ import scala.reflect.ClassTag
  * Internal API
  */
 private[lagom] final class CouchbaseReadSideImpl(system: ActorSystem,
-                                                 couchbase: CouchbaseSession,
+                                                 couchbaseSession: CouchbaseSession,
                                                  offsetStore: CouchbaseOffsetStore)
     extends CouchbaseReadSide {
 
   private val dispatcher = system.settings.config.getString("lagom.persistence.read-side.use-dispatcher")
   implicit val ec: MessageDispatcher = system.dispatchers.lookup(dispatcher)
 
-  override def builder[Event <: AggregateEvent[Event]](eventProcessorId: String): ReadSideHandlerBuilder[Event] =
+  override def builder[Event <: AggregateEvent[Event]](readSideId: String): ReadSideHandlerBuilder[Event] =
     new ReadSideHandlerBuilder[Event] {
       import CouchbaseReadSideHandler.Handler
       private var handlers = Map.empty[Class[_ <: Event], Handler[Event]]
@@ -42,6 +42,6 @@ private[lagom] final class CouchbaseReadSideImpl(system: ActorSystem,
       }
 
       override def build(): ReadSideHandler[Event] =
-        new CouchbaseReadSideHandler[Event](couchbase, offsetStore, handlers, eventProcessorId, dispatcher)
+        new CouchbaseReadSideHandler[Event](couchbaseSession, offsetStore, handlers, readSideId, dispatcher)
     }
 }
