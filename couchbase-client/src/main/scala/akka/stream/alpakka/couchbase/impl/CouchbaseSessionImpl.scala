@@ -10,6 +10,8 @@ import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
 import akka.stream.alpakka.couchbase.CouchbaseWriteSettings
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.internal.CouchbaseSessionJavaAdapter
+import akka.stream.alpakka.couchbase.javadsl
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
 import com.couchbase.client.java.bucket.AsyncBucketManager
@@ -32,6 +34,8 @@ import scala.concurrent.duration.FiniteDuration
 final private[couchbase] class CouchbaseSessionImpl(asyncBucket: AsyncBucket, cluster: Option[AsyncCluster])
     extends CouchbaseSession {
   import RxUtilities._
+
+  override def asJava: javadsl.CouchbaseSession = new CouchbaseSessionJavaAdapter(this)
 
   override def underlying: AsyncBucket = asyncBucket
 

@@ -29,9 +29,9 @@ import scala.concurrent.{duration, Future}
  * INTERNAL API
  */
 @InternalApi
-final class CouchbaseSessionJavaAdapter(delegate: ScalaCouchbaseSession) extends CouchbaseSession {
+private[couchbase] final class CouchbaseSessionJavaAdapter(delegate: ScalaCouchbaseSession) extends CouchbaseSession {
 
-  override def scalaDelegate: ScalaCouchbaseSession = delegate
+  override def asScala: ScalaCouchbaseSession = delegate
 
   override def underlying: AsyncBucket = delegate.underlying
 

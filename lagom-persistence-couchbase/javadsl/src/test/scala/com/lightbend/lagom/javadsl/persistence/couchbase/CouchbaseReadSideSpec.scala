@@ -16,7 +16,6 @@ import com.lightbend.lagom.internal.persistence.ReadSideConfig
 import com.lightbend.lagom.javadsl.persistence.{AbstractReadSideSpec, ReadSideProcessor, TestEntity}
 import com.typesafe.config.{Config, ConfigFactory}
 import play.api.inject.guice.GuiceInjectorBuilder
-import akka.stream.alpakka.couchbase.internal.CouchbaseSessionJavaAdapter
 import com.lightbend.lagom.javadsl.persistence.TestEntityReadSide
 
 object CouchbaseReadSideSpec {
@@ -31,7 +30,7 @@ class CouchbaseReadSideSpec
 
   private lazy val injector = new GuiceInjectorBuilder().build()
 
-  lazy val testSession = new CouchbaseSessionJavaAdapter(couchbaseSession)
+  lazy val testSession = couchbaseSession.asJava
 
   override protected lazy val persistentEntityRegistry = new CouchbasePersistentEntityRegistry(system, injector)
 

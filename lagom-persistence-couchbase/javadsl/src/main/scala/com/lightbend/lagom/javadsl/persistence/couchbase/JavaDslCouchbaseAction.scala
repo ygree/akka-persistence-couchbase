@@ -20,6 +20,6 @@ object JavaDslCouchbaseAction {
   def apply(action: CouchbaseAction)(implicit ec: ExecutionContext): JavaDslCouchbaseAction =
     new JavaDslCouchbaseAction {
       override def execute(ab: CouchbaseSession): CompletionStage[Done] =
-        action.execute(ab.scalaDelegate, ec).toJava
+        action.execute(ab.asScala, ec).toJava
     }
 }
