@@ -9,13 +9,9 @@ import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession;
 import com.couchbase.client.java.document.JsonDocument;
 import com.couchbase.client.java.document.json.JsonObject;
 import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseReadSide;
-import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseAction;
 import org.pcollections.PSequence;
 
 import javax.inject.Inject;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 public class TestEntityReadSide {
@@ -52,16 +48,13 @@ public class TestEntityReadSide {
           .build();
     }
 
-    private CompletionStage<List<CouchbaseAction>> updateCount(TestEntity.Appended event) {
-      return CompletableFuture.completedFuture(Collections.singletonList(session ->
-          getCount(session, event.getEntityId()).thenComposeAsync(count -> {
-            JsonObject content = JsonObject.create().put("count", count + 1);
-
-            return session
-                .upsert(JsonDocument.create("count-" + event.getEntityId(), content))
-                .thenApply(d -> Done.getInstance());
-          })
-      ));
+    private CompletionStage<Done> updateCount(CouchbaseSession session, TestEntity.Appended event) {
+      return getCount(session, event.getEntityId()).thenComposeAsync(count -> {
+        JsonObject content = JsonObject.create().put("count", count + 1);
+        return session
+            .upsert(JsonDocument.create("count-" + event.getEntityId(), content))
+            .thenApply(d -> Done.getInstance());
+      });
     }
 
     @Override

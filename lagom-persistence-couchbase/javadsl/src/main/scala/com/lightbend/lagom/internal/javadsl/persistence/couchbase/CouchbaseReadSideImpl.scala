@@ -5,15 +5,15 @@
 package com.lightbend.lagom.internal.javadsl.persistence.couchbase
 
 import java.util.concurrent.CompletionStage
-import java.util.function.{Function => JFunction}
-import java.util.{List => JList}
+import java.util.function.BiFunction
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.dispatch.MessageDispatcher
 import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
+import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseReadSide
 import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseReadSide.ReadSideHandlerBuilder
-import com.lightbend.lagom.javadsl.persistence.couchbase.{CouchbaseAction, CouchbaseReadSide}
 import com.lightbend.lagom.javadsl.persistence.{AggregateEvent, Offset, ReadSideProcessor}
 import javax.inject.{Inject, Singleton}
 import play.api.inject.Injector
@@ -36,10 +36,10 @@ private[lagom] class CouchbaseReadSideImpl @Inject()(
 
       override def setEventHandler[E <: Event](
           eventClass: Class[E],
-          handler: JFunction[E, CompletionStage[JList[CouchbaseAction]]]
+          handler: BiFunction[CouchbaseSession, E, CompletionStage[Done]]
       ): ReadSideHandlerBuilder[Event] = {
 
-        handlers += (eventClass -> ((event: E, offset: Offset) => handler(event)))
+        handlers += (eventClass -> ((cs: CouchbaseSession, event: E, offset: Offset) => handler(cs, event)))
         this
       }
 

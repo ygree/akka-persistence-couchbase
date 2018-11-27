@@ -4,12 +4,14 @@
 
 package com.lightbend.lagom.javadsl.persistence.couchbase;
 
+import akka.Done;
+import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession;
 import com.lightbend.lagom.javadsl.persistence.AggregateEvent;
 import com.lightbend.lagom.javadsl.persistence.ReadSideProcessor;
 
 import java.util.List;
 import java.util.concurrent.CompletionStage;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 /**
  * Couchbase read side support.
@@ -38,7 +40,9 @@ public interface CouchbaseReadSide {
      * @param handler    The function to handle the events.
      * @return This builder for fluent invocation
      */
-    <E extends Event> ReadSideHandlerBuilder<Event> setEventHandler(Class<E> eventClass, Function<E, CompletionStage<List<CouchbaseAction>>> handler);
+    <E extends Event> ReadSideHandlerBuilder<Event> setEventHandler(Class<E> eventClass, BiFunction<CouchbaseSession, E, CompletionStage<Done>> handler);
+
+    //TODO: setEventHandler function with Offset provided
 
     /**
      * Build the read side handler.

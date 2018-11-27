@@ -4,9 +4,7 @@
 
 package com.lightbend.lagom.internal.javadsl.persistence.couchbase
 
-import java.util
 import java.util.concurrent.CompletionStage
-import java.util.{List => JList}
 
 import akka.Done
 import akka.japi.Pair
@@ -15,14 +13,10 @@ import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
 import akka.stream.javadsl.Flow
 import com.lightbend.lagom.internal.javadsl.persistence.OffsetAdapter
 import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseOffsetDao, CouchbaseOffsetStore}
-import com.lightbend.lagom.scaladsl.persistence.couchbase.{CouchbaseAction => ScalaDslCouchbaseAction}
-import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseAction
 import com.lightbend.lagom.javadsl.persistence.ReadSideProcessor.ReadSideHandler
 import com.lightbend.lagom.javadsl.persistence.{AggregateEvent, AggregateEventTag, Offset}
-import org.pcollections.TreePVector
 import org.slf4j.LoggerFactory
 
-import scala.collection.JavaConverters._
 import scala.compat.java8.FutureConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -30,12 +24,10 @@ import scala.concurrent.{ExecutionContext, Future}
  * Internal API
  */
 private[couchbase] object CouchbaseReadSideHandler {
-  import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseAction
-
-  type Handler[Event] = (_ <: Event, Offset) => CompletionStage[JList[CouchbaseAction]]
+  type Handler[Event] = (CouchbaseSession, _ <: Event, Offset) => CompletionStage[Done]
 
   def emptyHandler[Event, E <: Event]: Handler[Event] =
-    (_: E, _: Offset) => Future.successful(util.Collections.emptyList[CouchbaseAction]()).toJava
+    (_: CouchbaseSession, _: E, _: Offset) => Future.successful(Done.getInstance()).toJava
 }
 
 import CouchbaseReadSideHandler.Handler
@@ -57,31 +49,16 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
   @volatile
   private var offsetDao: CouchbaseOffsetDao = _
 
-  protected def invoke(handler: Handler[Event],
-                       event: Event,
-                       offset: Offset): CompletionStage[JList[CouchbaseAction]] = {
-    val couchbaseActions = for {
-      handlerActions <- handler
-        .asInstanceOf[(Event, Offset) => CompletionStage[JList[CouchbaseAction]]]
-        .apply(event, offset)
-        .toScala
-    } yield {
-      val akkaOffset = OffsetAdapter.dslOffsetToOffset(offset)
-      TreePVector
-        .from(handlerActions)
-        .plus(fromScalaDslCouchbaseAction(offsetDao.bindSaveOffset(akkaOffset)))
-        .asInstanceOf[JList[CouchbaseAction]]
-    }
-    couchbaseActions.toJava
-  }
-
-  private def fromScalaDslCouchbaseAction(
-      action: ScalaDslCouchbaseAction
-  )(implicit ec: ExecutionContext): CouchbaseAction =
-    new CouchbaseAction {
-      override def execute(ab: CouchbaseSession): CompletionStage[Done] =
-        action.execute(ab.asScala, ec).toJava
-    }
+  protected def invoke(handler: Handler[Event], event: Event, offset: Offset): CompletionStage[Done] =
+    handler
+      .asInstanceOf[(CouchbaseSession, Event, Offset) => CompletionStage[Done]]
+      .apply(couchbaseSession, event, offset)
+      .toScala
+      .flatMap { _ =>
+        val akkaOffset = OffsetAdapter.dslOffsetToOffset(offset)
+        offsetDao.bindSaveOffset(akkaOffset).execute(couchbaseSession.asScala, ec)
+      }
+      .toJava
 
   override def prepare(tag: AggregateEventTag[Event]): CompletionStage[Offset] =
     (for {
@@ -91,11 +68,7 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
       OffsetAdapter.offsetToDslOffset(dao.loadedOffset)
     }).toJava
 
-  override def handle(): Flow[Pair[Event, Offset], Done, _] = {
-
-    def executeStatements(statements: JList[CouchbaseAction]): Future[Done] =
-      Future.traverse(statements.asScala)(a => a.execute(couchbaseSession).toScala).map(_ => Done)
-
+  override def handle(): Flow[Pair[Event, Offset], Done, _] =
     akka.stream.scaladsl
       .Flow[Pair[Event, Offset]]
       .mapAsync(parallelism = 1) { pair =>
@@ -113,10 +86,9 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
             }
           )
 
-        invoke(handler, event, offset).toScala.flatMap(executeStatements)
+        invoke(handler, event, offset).toScala
 
       }
       .withAttributes(ActorAttributes.dispatcher(dispatcher))
       .asJava
-  }
 }
