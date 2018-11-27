@@ -3,6 +3,7 @@
  */
 
 package com.lightbend.lagom.javadsl.persistence.couchbase
+
 import java.lang
 import java.util.concurrent.CompletionStage
 

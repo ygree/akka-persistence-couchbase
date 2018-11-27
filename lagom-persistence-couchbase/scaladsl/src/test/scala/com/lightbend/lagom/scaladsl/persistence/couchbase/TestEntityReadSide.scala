@@ -12,7 +12,6 @@ import com.couchbase.client.java.document.json.JsonObject
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
 import com.lightbend.lagom.scaladsl.persistence.{AggregateEventTag, EventStreamElement, ReadSideProcessor, TestEntity}
 
-import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
 
 object TestEntityReadSide {
@@ -22,17 +21,14 @@ object TestEntityReadSide {
     def buildHandler(): ReadSideHandler[TestEntity.Evt] = {
       import system.dispatcher
 
-      def updateCount(element: EventStreamElement[TestEntity.Appended]): Future[immutable.Seq[CouchbaseAction]] =
-        Future.successful(immutable.Seq(new CouchbaseAction {
-          override def execute(ab: CouchbaseSession, ex: ExecutionContext): Future[Done] =
-            getCount(ab, element.entityId)
-              .flatMap((count: Long) => {
-                ab.upsert(
-                  JsonDocument.create(s"count-${element.entityId}", JsonObject.create().put("count", count + 1))
-                )
-              })
-              .map(_ => Done)
-        }))
+      def updateCount(cs: CouchbaseSession, element: EventStreamElement[TestEntity.Appended]): Future[Done] =
+        getCount(cs, element.entityId)
+          .flatMap((count: Long) => {
+            cs.upsert(
+              JsonDocument.create(s"count-${element.entityId}", JsonObject.create().put("count", count + 1))
+            )
+          })
+          .map(_ => Done)
 
       readSide
         .builder[TestEntity.Evt]("testoffsets")

@@ -14,19 +14,16 @@ import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandle
 import com.lightbend.lagom.scaladsl.persistence._
 import org.slf4j.LoggerFactory
 
-import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * Internal API
  */
 private[couchbase] object CouchbaseReadSideHandler {
-  import com.lightbend.lagom.scaladsl.persistence.couchbase.CouchbaseAction
 
-  type Handler[Event] = EventStreamElement[_ <: Event] => Future[immutable.Seq[CouchbaseAction]]
+  type Handler[Event] = (CouchbaseSession, EventStreamElement[_ <: Event]) => Future[Done]
 
-  def emptyHandler[Event]: Handler[Event] =
-    _ => Future.successful(immutable.Seq.empty[CouchbaseAction])
+  def emptyHandler[Event]: Handler[Event] = (_, _) => Future.successful(Done)
 }
 
 /**
@@ -42,18 +39,16 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
     extends ReadSideHandler[Event] {
 
   import CouchbaseReadSideHandler.Handler
-  import com.lightbend.lagom.scaladsl.persistence.couchbase.CouchbaseAction
 
   private val log = LoggerFactory.getLogger(this.getClass)
 
   @volatile
   private var offsetDao: CouchbaseOffsetDao = _
 
-  protected def invoke(handler: Handler[Event],
-                       element: EventStreamElement[Event]): Future[immutable.Seq[CouchbaseAction]] =
-    for {
-      statements <- handler.apply(element)
-    } yield statements :+ offsetDao.bindSaveOffset(element.offset)
+  protected def invoke(handler: Handler[Event], element: EventStreamElement[Event]): Future[Done] =
+    handler
+      .apply(couchbase, element)
+      .flatMap(_ => offsetDao.bindSaveOffset(element.offset).execute(couchbase, ec))
 
   override def prepare(tag: AggregateEventTag[Event]): Future[Offset] =
     for {
@@ -63,11 +58,7 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
       dao.loadedOffset
     }
 
-  override def handle(): Flow[EventStreamElement[Event], Done, NotUsed] = {
-
-    def executeStatements(statements: Seq[CouchbaseAction]): Future[Done] =
-      Future.traverse(statements)(a => a.execute(couchbase, ec)).map(_ => Done)
-
+  override def handle(): Flow[EventStreamElement[Event], Done, NotUsed] =
     Flow[EventStreamElement[Event]]
       .mapAsync(parallelism = 1) { elem =>
         val eventClass = elem.event.getClass
@@ -83,9 +74,8 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
             }
           )
 
-        invoke(handler, elem).flatMap(executeStatements)
+        invoke(handler, elem)
 
       }
       .withAttributes(ActorAttributes.dispatcher(dispatcher))
-  }
 }
