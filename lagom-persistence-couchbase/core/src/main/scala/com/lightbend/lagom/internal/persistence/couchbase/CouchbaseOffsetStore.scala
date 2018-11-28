@@ -11,6 +11,7 @@ import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.lightbend.lagom.internal.persistence.ReadSideConfig
+import com.lightbend.lagom.scaladsl.persistence.couchbase.CouchbaseAction
 import com.lightbend.lagom.spi.persistence.{OffsetDao, OffsetStore}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -57,8 +58,7 @@ private[lagom] final class CouchbaseOffsetDao(couchbase: CouchbaseSession,
                                               ec: ExecutionContext)
     extends OffsetDao {
 
-  override def saveOffset(offset: Offset): Future[Done] =
-    bindSaveOffset(offset).execute(couchbase, ec)
+  override def saveOffset(offset: Offset): Future[Done] = bindSaveOffset(offset).execute(couchbase, ec)
 
   def bindSaveOffset(offset: Offset): CouchbaseAction =
     offset match {

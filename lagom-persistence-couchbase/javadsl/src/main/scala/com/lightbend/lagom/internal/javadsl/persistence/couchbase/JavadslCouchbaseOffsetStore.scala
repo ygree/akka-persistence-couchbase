@@ -17,4 +17,4 @@ import javax.inject.{Inject, Singleton}
 private[lagom] final class JavadslCouchbaseOffsetStore @Inject()(system: ActorSystem,
                                                                  couchbase: CouchbaseSession,
                                                                  config: ReadSideConfig)
-    extends CouchbaseOffsetStore(system, config, couchbase.scalaDelegate)
+    extends CouchbaseOffsetStore(system, config, couchbase.asScala)

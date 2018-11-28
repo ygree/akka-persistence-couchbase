@@ -2,7 +2,7 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package com.lightbend.lagom.internal.persistence.couchbase
+package com.lightbend.lagom.scaladsl.persistence.couchbase
 
 import akka.Done
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
@@ -10,5 +10,5 @@ import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import scala.concurrent.{ExecutionContext, Future}
 
 trait CouchbaseAction {
-  def execute(ab: CouchbaseSession, ec: ExecutionContext): Future[Done]
+  def execute(cs: CouchbaseSession, ec: ExecutionContext): Future[Done]
 }

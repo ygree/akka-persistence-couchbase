@@ -9,12 +9,11 @@ import akka.stream.ActorAttributes
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Flow
 import akka.{Done, NotUsed}
-import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseAction, CouchbaseOffsetDao, CouchbaseOffsetStore}
+import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseOffsetDao, CouchbaseOffsetStore}
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
 import com.lightbend.lagom.scaladsl.persistence._
 import org.slf4j.LoggerFactory
 
-import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -22,10 +21,9 @@ import scala.concurrent.{ExecutionContext, Future}
  */
 private[couchbase] object CouchbaseReadSideHandler {
 
-  type Handler[Event] = EventStreamElement[_ <: Event] => Future[immutable.Seq[CouchbaseAction]]
+  type Handler[Event] = (CouchbaseSession, EventStreamElement[_ <: Event]) => Future[Done]
 
-  def emptyHandler[Event]: Handler[Event] =
-    _ => Future.successful(immutable.Seq.empty[CouchbaseAction])
+  def emptyHandler[Event]: Handler[Event] = (_, _) => Future.successful(Done)
 }
 
 /**
@@ -47,16 +45,10 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
   @volatile
   private var offsetDao: CouchbaseOffsetDao = _
 
-  protected def invoke(handler: Handler[Event],
-                       element: EventStreamElement[Event]): Future[immutable.Seq[CouchbaseAction]] =
-    for {
-      statements <- handler
-        .asInstanceOf[EventStreamElement[Event] => Future[immutable.Seq[CouchbaseAction]]]
-        .apply(element)
-    } yield statements :+ offsetDao.bindSaveOffset(element.offset)
-
-  protected def offsetStatement(offset: Offset): immutable.Seq[CouchbaseAction] =
-    immutable.Seq(offsetDao.bindSaveOffset(offset))
+  protected def invoke(handler: Handler[Event], element: EventStreamElement[Event]): Future[Done] =
+    handler
+      .apply(couchbase, element)
+      .flatMap(_ => offsetDao.bindSaveOffset(element.offset).execute(couchbase, ec))
 
   override def prepare(tag: AggregateEventTag[Event]): Future[Offset] =
     for {
@@ -66,11 +58,7 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
       dao.loadedOffset
     }
 
-  override def handle(): Flow[EventStreamElement[Event], Done, NotUsed] = {
-
-    def executeStatements(statements: Seq[CouchbaseAction]): Future[Done] =
-      Future.traverse(statements)(a => a.execute(couchbase, ec)).map(_ => Done)
-
+  override def handle(): Flow[EventStreamElement[Event], Done, NotUsed] =
     Flow[EventStreamElement[Event]]
       .mapAsync(parallelism = 1) { elem =>
         val eventClass = elem.event.getClass
@@ -86,9 +74,8 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
             }
           )
 
-        invoke(handler, elem).flatMap(executeStatements)
+        invoke(handler, elem)
 
       }
       .withAttributes(ActorAttributes.dispatcher(dispatcher))
-  }
 }

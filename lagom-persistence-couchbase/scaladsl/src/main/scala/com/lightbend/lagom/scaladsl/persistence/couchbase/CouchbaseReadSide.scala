@@ -3,14 +3,13 @@
  */
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
-
-import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseAction
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
 import com.lightbend.lagom.scaladsl.persistence.{AggregateEvent, EventStreamElement}
 
-import scala.collection.immutable
 import scala.concurrent.Future
 import scala.reflect.ClassTag
+import akka.Done
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 
 /**
  * Couchbase read side support.
@@ -34,7 +33,7 @@ object CouchbaseReadSide {
      * @return This builder for fluent invocation
      */
     def setEventHandler[E <: Event: ClassTag](
-        handler: EventStreamElement[E] => Future[immutable.Seq[CouchbaseAction]]
+        handler: (CouchbaseSession, EventStreamElement[E]) => Future[Done]
     ): ReadSideHandlerBuilder[Event]
 
     /**

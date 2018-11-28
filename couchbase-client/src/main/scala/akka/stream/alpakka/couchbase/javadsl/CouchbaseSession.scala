@@ -53,7 +53,7 @@ abstract class CouchbaseSession {
 
   def underlying: AsyncBucket
 
-  def scalaDelegate: ScalaDslCouchbaseSession
+  def asScala: ScalaDslCouchbaseSession
 
   /**
    * Insert a document using the default write settings
