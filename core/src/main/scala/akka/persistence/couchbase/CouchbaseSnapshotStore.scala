@@ -6,7 +6,8 @@ package akka.persistence.couchbase
 
 import akka.actor.ActorSystem
 import akka.dispatch.ExecutionContexts
-import akka.persistence.couchbase.CouchbaseSchema.Fields
+import akka.persistence.couchbase.internal.CouchbaseSchema.Fields
+import akka.persistence.couchbase.internal.{AsyncCouchbaseSession, CouchbaseSchema, SerializedMessage}
 import akka.persistence.snapshot.SnapshotStore
 import akka.persistence.{SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria}
 import akka.serialization.SerializationExtension

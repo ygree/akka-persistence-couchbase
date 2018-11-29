@@ -4,17 +4,23 @@
 
 package akka.persistence.couchbase
 
+import akka.annotation.InternalApi
 import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
+import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.{PersistTo, ReplicateTo}
 import com.typesafe.config.Config
 
 import scala.concurrent.duration._
 
-final class CouchbaseJournalSettings private (val sessionSettings: CouchbaseSessionSettings,
-                                              val bucket: String,
-                                              val writeSettings: CouchbaseWriteSettings,
-                                              val readTimeout: FiniteDuration)
+final case class CouchbaseJournalSettings private (sessionSettings: CouchbaseSessionSettings,
+                                                   bucket: String,
+                                                   writeSettings: CouchbaseWriteSettings,
+                                                   readTimeout: FiniteDuration)
 
+/**
+ * INTERNAL API
+ */
+@InternalApi
 object CouchbaseJournalSettings {
 
   def apply(config: Config): CouchbaseJournalSettings = {
@@ -29,7 +35,7 @@ object CouchbaseJournalSettings {
     )
     val readTimeout = config.getDuration("write.read-timeout").toMillis.millis
 
-    new CouchbaseJournalSettings(sessionSettings, bucket, writeSettings, readTimeout)
+    CouchbaseJournalSettings(sessionSettings, bucket, writeSettings, readTimeout)
   }
 
   private def parseReplicateTo(value: String): ReplicateTo = value match {
@@ -51,30 +57,56 @@ object CouchbaseJournalSettings {
   }
 }
 
-final class CouchbaseReadJournalSettings private (val sessionSettings: CouchbaseSessionSettings, val bucket: String)
+/**
+ * INTERNAL API
+ */
+@InternalApi
+private[couchbase] final case class CouchbaseReadJournalSettings(sessionSettings: CouchbaseSessionSettings,
+                                                                 bucket: String,
+                                                                 pageSize: Int,
+                                                                 eventByTagSettings: EventByTagSettings)
+final case class EventByTagSettings(eventualConsistencyDelay: FiniteDuration, verboseDebugLogging: Boolean)
 
-object CouchbaseReadJournalSettings {
+/**
+ * INTERNAL API
+ */
+@InternalApi
+private[couchbase] object CouchbaseReadJournalSettings {
 
   def apply(config: Config): CouchbaseReadJournalSettings = {
-    // FIXME uses the same config as CouchbaseJournalSettings for now
     val clientConfig = config.getConfig("connection")
     val bucket = config.getString("write.bucket")
     val sessionSettings = CouchbaseSessionSettings(clientConfig)
 
-    new CouchbaseReadJournalSettings(sessionSettings, bucket)
+    val pagesize = config.getInt("read.page-size")
+
+    val eventByTagConfig = config.getConfig("read.events-by-tag")
+    val eventByTagSettings = EventByTagSettings(
+      eventByTagConfig.getDuration("eventual-consistency-delay").toMillis.millis,
+      eventByTagConfig.getBoolean("verbose-debug-logging")
+    )
+
+    CouchbaseReadJournalSettings(sessionSettings, bucket, pagesize, eventByTagSettings)
   }
 }
 
-final class CouchbaseSnapshotSettings private (val sessionSettings: CouchbaseSessionSettings, val bucket: String)
+/**
+ * INTERNAL API
+ */
+@InternalApi
+private[couchbase] final case class CouchbaseSnapshotSettings(sessionSettings: CouchbaseSessionSettings, bucket: String)
 
-object CouchbaseSnapshotSettings {
+/**
+ * INTERNAL API
+ */
+@InternalApi
+private[couchbase] object CouchbaseSnapshotSettings {
 
   def apply(config: Config): CouchbaseSnapshotSettings = {
-    // FIXME uses the same config as CouchbaseJournalSettings for now
     val clientConfig = config.getConfig("connection")
     val bucket = config.getString("snapshot.bucket")
     val sessionSettings = CouchbaseSessionSettings(clientConfig)
 
-    new CouchbaseSnapshotSettings(sessionSettings, bucket)
+    CouchbaseSnapshotSettings(sessionSettings, bucket)
   }
 }

@@ -20,7 +20,7 @@ import scala.concurrent.duration._
 
 object CouchbaseReadSideSpec {
 
-  val defaultConfig: Config = ConfigFactory.parseString("akka.loglevel = INFO")
+  val defaultConfig: Config = ConfigFactory.parseString("akka.loglevel = info")
 }
 
 class CouchbaseReadSideSpec

@@ -2,19 +2,23 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package akka.persistence.couchbase
+package akka.persistence.couchbase.internal
 
+import akka.annotation.InternalApi
 import akka.stream.stage._
 import akka.stream.{Attributes, Outlet, SourceShape}
 import com.couchbase.client.java.AsyncBucket
-import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{AsyncN1qlQueryResult, AsyncN1qlQueryRow, N1qlQuery}
 import rx.functions.Func1
 import rx.{Observable, Subscriber}
 
 import scala.concurrent.duration._
 
-object N1qlQueryStage {
+/**
+ * INTERNAL API
+ */
+@InternalApi
+private[akka] object N1qlQueryStage {
   trait Control
   case object Poll
 
@@ -30,16 +34,17 @@ object N1qlQueryStage {
 
 }
 
-// FIXME is this general enough that we can put it in the connector?
-// TODO pagination
-class N1qlQueryStage[S](live: Boolean,
-                        pageSize: Int,
-                        initialQuery: N1qlQuery,
-                        namedParams: JsonObject,
-                        bucket: AsyncBucket,
-                        initialState: S,
-                        nextQuery: S => Option[N1qlQuery],
-                        updateState: (S, AsyncN1qlQueryRow) => S)
+/**
+ * INTERNAL API
+ */
+@InternalApi
+private[akka] final class N1qlQueryStage[S](live: Boolean,
+                                            pageSize: Int,
+                                            initialQuery: N1qlQuery,
+                                            bucket: AsyncBucket,
+                                            initialState: S,
+                                            nextQuery: S => Option[N1qlQuery],
+                                            updateState: (S, AsyncN1qlQueryRow) => S)
     extends GraphStageWithMaterializedValue[SourceShape[AsyncN1qlQueryRow], N1qlQueryStage.Control] {
 
   import N1qlQueryStage._
@@ -59,6 +64,7 @@ class N1qlQueryStage[S](live: Boolean,
       log.debug("New row: {}. Updating state to {}", row, currentState)
       rowsInCurrentQuery += 1
       buffer = buffer :+ row
+
       tryPush()
     }
 
@@ -133,7 +139,7 @@ class N1qlQueryStage[S](live: Boolean,
     private def executeQuery(query: N1qlQuery): Unit = {
       state = Querying
       // FIXME deal with initial errors
-      // FIXME passing a chunk across the async callback seems better than unfolding first?
+      log.debug("Executing query {}", query)
       bucket
         .query(query)
         .flatMap(N1qlQueryStage.unfoldRows)

@@ -4,11 +4,14 @@
 
 package akka.persistence.couchbase
 
+import java.util.UUID
+
 import akka.NotUsed
 import akka.actor.ExtendedActorSystem
-import akka.dispatch.ExecutionContexts
+import akka.annotation.InternalApi
 import akka.event.Logging
-import akka.persistence.couchbase.CouchbaseSchema.Fields
+import akka.persistence.couchbase.internal.CouchbaseSchema.Fields
+import akka.persistence.couchbase.internal._
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
 import akka.serialization.{Serialization, SerializationExtension}
@@ -28,7 +31,10 @@ object CouchbaseReadJournal {
   final val Identifier = "couchbase-journal.read"
 }
 
-class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath: String)
+/**
+ * INTERNAL API (all access should be through the persistence query APIs)
+ */
+@InternalApi class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath: String)
     extends ReadJournal
     with AsyncCouchbaseSession
     with EventsByPersistenceIdQuery
@@ -45,7 +51,8 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
   protected implicit val executionContext = system.dispatcher
   private val serialization: Serialization = SerializationExtension(system)
 
-  private val settings: CouchbaseReadJournalSettings = {
+  /** INTERNAL API */
+  @InternalApi private[akka] val settings: CouchbaseReadJournalSettings = {
     // shared config is one level above the journal specific
     val commonPath = configPath.replaceAll("""\.read$""", "")
     val sharedConfig = system.settings.config.getConfig(commonPath)
@@ -62,24 +69,27 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
     closeCouchbaseSession()
   }
 
-  val pageSize: Int = 100 // FIXME from config
-
+  /* This query flattens the doc.messages into elements in the result and adds a field for the persistence id from
+   * the surrounding document
+   */
+  // FIXME will this really be ordered for the entire result rather than just inside documents?
   private val eventsByTagQuery =
-    """select * FROM akka
-      |WHERE ANY tag IN akka.all_tags SATISFIES tag = $tag END
-      |AND ordering >= $ordering
-      |ORDER BY ordering
-      |limit $limit
+    s"""
+      |SELECT a.persistence_id, m.* FROM ${settings.bucket} a UNNEST messages AS m
+      |WHERE ARRAY_CONTAINS(m.tags, $$tag) = true
+      |AND m.ordering > $$ordering
+      |ORDER BY m.ordering
+      |limit $$limit
     """.stripMargin
 
   private val eventsByPersistenceId =
-    """
-      |select * from akka
-      |where persistence_id = $pid
-      |and sequence_from  >= $from
-      |and sequence_from <= $to
+    s"""
+      |select * from ${settings.bucket}
+      |where persistence_id = $$pid
+      |and sequence_from  >= $$from
+      |and sequence_from <= $$to
       |order by sequence_from
-      |limit $limit
+      |limit $$limit
     """.stripMargin
 
   case class EventsByPersistenceIdState(from: Long, to: Long)
@@ -100,29 +110,28 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
                                             fromSequenceNr: Long,
                                             toSequenceNr: Long): Source[EventEnvelope, NotUsed] =
     sourceWithCouchbaseSession { session =>
-      val params: JsonObject = JsonObject
-        .create()
-        .put("pid", persistenceId)
-        .put("to", toSequenceNr)
-        .put("limit", pageSize)
+      def params(from: Long) =
+        JsonObject
+          .create()
+          .put("pid", persistenceId)
+          .put("to", toSequenceNr)
+          .put("limit", settings.pageSize)
+          .put("from", from)
 
-      val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
       // TODO do the deleted to query first and start from higher of that and fromSequenceNr
       val source =
         Source
           .fromGraph(
             new N1qlQueryStage[EventsByPersistenceIdState](
               live,
-              pageSize,
-              N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", fromSequenceNr), queryParams),
-              params,
+              settings.pageSize,
+              N1qlQuery.parameterized(eventsByPersistenceId, params(fromSequenceNr)),
               session.underlying,
-              EventsByPersistenceIdState(fromSequenceNr, 0),
-              state => {
+              EventsByPersistenceIdState(fromSequenceNr, 0), { state =>
                 if (state.to >= toSequenceNr)
                   None
                 else
-                  Some(N1qlQuery.parameterized(eventsByPersistenceId, params.put("from", state.from), queryParams))
+                  Some(N1qlQuery.parameterized(eventsByPersistenceId, params(state.from)))
               },
               (_, row) =>
                 EventsByPersistenceIdState(row.value().getObject(settings.bucket).getLong(Fields.SequenceFrom) + 1,
@@ -134,12 +143,10 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
       eventsByPersistenceIdSource(source)
     }
 
-  /*
-  Messages persisted together with PersistAll have the same Offset
-
-   CREATE INDEX `tags` ON `akka`((all (`all_tags`)),`ordering`)
+  /**
+   * @param offset Either no offset or a timebased UUID offset, result will be exclusive the given UUID
+   * @return A stream of tagged events sorted by their UUID
    */
-
   override def eventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] =
     internalEventsByTag(live = true, tag, offset)
 
@@ -148,76 +155,70 @@ class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath:
 
   private def internalEventsByTag(live: Boolean, tag: String, offset: Offset): Source[EventEnvelope, NotUsed] =
     sourceWithCouchbaseSession { session =>
-      log.debug("events by tag: live {}, tag: {}, offset: {}", live, tag, offset)
-      val initialOrdering: Long = offset match {
-        case NoOffset => 0L
-        case Sequence(o) => o
-        case TimeBasedUUID(_) =>
-          throw new IllegalArgumentException("Couchbase Journal does not support Timeuuid offsets")
+      val initialOrdering: UUID = offset match {
+        case NoOffset => TimeBasedUUIDs.MinUUID
+        case Sequence(o) =>
+          throw new IllegalArgumentException("Couchbase Journal does not support sequence based offsets")
+        case TimeBasedUUID(value) => value
       }
+      val initialOrderingString = TimeBasedUUIDSerialization.toSortableString(initialOrdering)
 
-      val params: JsonObject = JsonObject
-        .create()
-        .put("tag", tag)
-        .put("limit", pageSize)
-      val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+      log.debug("events by tag: live {}, tag: {}, offset: {}", live, tag, initialOrderingString)
 
-      val sourceOfRows =
+      def params(fromOffset: String): JsonObject =
+        JsonObject
+          .create()
+          .put("tag", tag)
+          .put("ordering", fromOffset)
+          .put("limit", settings.pageSize)
+
+      // note that the result is "unnested" into the message objects + the persistence id, so the normal
+      // document structure does not apply here
+      val taggedRows: Source[AsyncN1qlQueryRow, NotUsed] =
         Source
           .fromGraph(
-            new N1qlQueryStage[Long](
+            new N1qlQueryStage[String](
               live,
-              pageSize,
-              N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, initialOrdering), queryParams),
-              params,
+              settings.pageSize,
+              N1qlQuery.parameterized(eventsByTagQuery, params(initialOrderingString)),
               session.underlying,
-              initialOrdering,
-              ordering =>
-                Some(N1qlQuery.parameterized(eventsByTagQuery, params.put(Fields.Ordering, ordering), queryParams)),
-              (_, row) => row.value().getObject(settings.bucket).getLong(Fields.Ordering) + 1
+              initialOrderingString,
+              ordering => Some(N1qlQuery.parameterized(eventsByTagQuery, params(ordering))), { (_, row) =>
+                row.value().getString(Fields.Ordering)
+              }
             )
           )
           .mapMaterializedValue(_ => NotUsed)
 
-      eventsByTagSource(
-        sourceOfRows,
-        tag
-      )
+      @volatile var lastUUID = TimeBasedUUIDs.MinUUID
+
+      taggedRows.mapAsync(1) { row: AsyncN1qlQueryRow =>
+        val value = row.value()
+        CouchbaseSchema.deserializeTaggedEvent(value, Long.MaxValue, serialization).map { tpr =>
+          if (TimeBasedUUIDComparator.comparator.compare(tpr.offset, lastUUID) < 0)
+            throw new RuntimeException(
+              s"Saw time based uuids go backward, last previous [$lastUUID], saw [${tpr.offset}]"
+            )
+          else
+            lastUUID = tpr.offset
+          EventEnvelope(Offset.timeBasedUUID(tpr.offset), tpr.pr.persistenceId, tpr.pr.sequenceNr, tpr.pr.payload)
+        }
+      }
     }
 
   private def eventsByPersistenceIdSource(in: Source[AsyncN1qlQueryRow, NotUsed]): Source[EventEnvelope, NotUsed] =
     in.mapAsync(1) { row: AsyncN1qlQueryRow =>
         val value = row.value().getObject(settings.bucket)
-        CouchbaseSchema.deserializeEvents(value, Long.MaxValue, serialization, CouchbaseSchema.extractTaggedEvent).map {
+        CouchbaseSchema.deserializeEvents(value, Long.MaxValue, serialization, CouchbaseSchema.extractEvent).map {
           deserialized =>
             deserialized.map(
               tpr =>
                 EventEnvelope(Offset
-                                .sequence(tpr.pr.sequenceNr), // FIXME, should this be +1, check inclusivity of offsets
-                              tpr.pr.persistenceId,
-                              tpr.pr.sequenceNr,
-                              tpr.pr.payload)
+                                .sequence(tpr.sequenceNr), // FIXME, should this be +1, check inclusivity of offsets
+                              tpr.persistenceId,
+                              tpr.sequenceNr,
+                              tpr.payload)
             )
-        }
-      }
-      .mapConcat(identity)
-
-  private def eventsByTagSource(in: Source[AsyncN1qlQueryRow, NotUsed], tag: String): Source[EventEnvelope, NotUsed] =
-    in.mapAsync(1) { row: AsyncN1qlQueryRow =>
-        val value = row.value().getObject(settings.bucket)
-        CouchbaseSchema.deserializeEvents(value, Long.MaxValue, serialization, CouchbaseSchema.extractTaggedEvent).map {
-          deserialized =>
-            val ordering = value.getLong(Fields.Ordering)
-            deserialized
-              .filter(_.tags.contains(tag))
-              .map(
-                tpr =>
-                  EventEnvelope(Offset
-                                  .sequence(ordering + 1), // set to the next one so resume doesn't get this event back
-                                tpr.pr.persistenceId,
-                                tpr.pr.sequenceNr,
-                                tpr.pr.payload)
-              )
         }
       }
       .mapConcat(identity)

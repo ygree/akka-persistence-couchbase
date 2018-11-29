@@ -52,7 +52,7 @@ sleep 20 #TODO: how to check if it's ready to process N1QL queries
 # Create indexes
 log "Create bucket indices ........."
 cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`pi2\` ON \`akka\`((self.\`persistence_id\`),(self.\`sequence_from\`));"
-cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`tags\` ON \`akka\`((all (\`all_tags\`)),\`ordering\`);"
-
+cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`tags\` ON \`akka\` (ALL ARRAY m.tags FOR m IN messages END);"
+cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`tags-ordering\` ON \`akka\` (DISTINCT ARRAY m.ordering FOR m IN messages END);"
 
 fg 1

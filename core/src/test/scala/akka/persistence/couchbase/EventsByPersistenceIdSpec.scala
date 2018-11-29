@@ -30,113 +30,122 @@ class EventsByPersistenceIdSpec
   // TODO run this test with smaller pageSize, when that is configurable
 
   val noMsgTimeout = 100.millis
+  private val readOurOwnWritesTimeout = 10.seconds
 
   implicit val materializer = ActorMaterializer()
   lazy val queries: CouchbaseReadJournal =
     PersistenceQuery(system).readJournalFor[CouchbaseReadJournal](CouchbaseReadJournal.Identifier)
 
-  def setup(persistenceId: String, n: Int): ActorRef = {
+  def setup[T](persistenceId: String, n: Int)(test: ActorRef => T): T = {
     val ref = system.actorOf(TestActor.props(persistenceId))
     for (i <- 1 to n) {
       ref ! s"$persistenceId-$i"
       expectMsg(s"$persistenceId-$i-done")
     }
 
-    ref
+    // no guarantee we can immediately read our own writes
+    awaitAssert(test(ref), readOurOwnWritesTimeout)
   }
 
   "Couchbase query EventsByPersistenceId" must {
 
     "find existing events" in {
-      setup("a", 3)
-
-      val src = queries.currentEventsByPersistenceId("a", 0L, Long.MaxValue)
-      src
-        .map(_.event)
-        .runWith(TestSink.probe[Any])
-        .request(2)
-        .expectNext("a-1", "a-2")
-        .expectNoMessage(noMsgTimeout)
-        .request(2)
-        .expectNext("a-3")
-        .expectComplete()
+      setup("a", 3) { _ =>
+        val src = queries.currentEventsByPersistenceId("a", 0L, Long.MaxValue)
+        src
+          .map(_.event)
+          .runWith(TestSink.probe[Any])
+          .request(2)
+          .expectNext("a-1", "a-2")
+          .expectNoMessage(noMsgTimeout)
+          .request(2)
+          .expectNext("a-3")
+          .expectComplete()
+      }
     }
 
     "find existing events from a sequence number" in {
-      setup("b", 10)
-      val src = queries.currentEventsByPersistenceId("b", 5L, Long.MaxValue)
+      setup("b", 10) { _ =>
+        val src = queries.currentEventsByPersistenceId("b", 5L, Long.MaxValue)
 
-      src
-        .map(_.sequenceNr)
-        .runWith(TestSink.probe[Any])
-        .request(7)
-        .expectNext(5, 6, 7, 8, 9, 10)
-        .expectComplete()
+        src
+          .map(_.sequenceNr)
+          .runWith(TestSink.probe[Any])
+          .request(7)
+          .expectNext(5, 6, 7, 8, 9, 10)
+          .expectComplete()
+      }
     }
 
     "not see any events if the stream starts after current latest event" in {
-      setup("c", 3)
-      val src = queries.currentEventsByPersistenceId("c", 5L, Long.MaxValue)
-      src
-        .map(_.event)
-        .runWith(TestSink.probe[Any])
-        .request(5)
-        .expectComplete()
+      setup("c", 3) { _ =>
+        val src = queries.currentEventsByPersistenceId("c", 5L, Long.MaxValue)
+        src
+          .map(_.event)
+          .runWith(TestSink.probe[Any])
+          .request(5)
+          .expectComplete()
+      }
     }
 
     "find existing events up to a sequence number" in {
-      setup("d", 3)
-      val src = queries.currentEventsByPersistenceId("d", 0L, 2L)
-      src
-        .map(_.sequenceNr)
-        .runWith(TestSink.probe[Any])
-        .request(5)
-        .expectNext(1, 2)
-        .expectComplete()
+      setup("d", 3) { _ =>
+        val src = queries.currentEventsByPersistenceId("d", 0L, 2L)
+        src
+          .map(_.sequenceNr)
+          .runWith(TestSink.probe[Any])
+          .request(5)
+          .expectNext(1, 2)
+          .expectComplete()
+      }
     }
 
     "not see new events after demand request" in {
-      val ref = setup("e", 3)
+      val probe = setup("e", 3) { ref =>
+        val src = queries.currentEventsByPersistenceId("e", 0L, Long.MaxValue)
+        val probe = src
+          .map(_.event)
+          .runWith(TestSink.probe[Any])
+          .request(2)
+          .expectNext("e-1", "e-2")
+          .expectNoMessage(noMsgTimeout)
 
-      val src = queries.currentEventsByPersistenceId("e", 0L, Long.MaxValue)
-      val probe = src
-        .map(_.event)
-        .runWith(TestSink.probe[Any])
-        .request(2)
-        .expectNext("e-1", "e-2")
-        .expectNoMessage(noMsgTimeout)
+        ref ! "e-4"
+        expectMsg("e-4-done")
+        probe
+      }
 
-      ref ! "e-4"
-      expectMsg("e-4-done")
+      awaitAssert({
+        probe
+          .expectNoMessage(noMsgTimeout)
+          .request(5)
+          .expectNext("e-3")
+          .expectComplete() // e-4 not seen
+      }, readOurOwnWritesTimeout)
 
-      probe
-        .expectNoMessage(noMsgTimeout)
-        .request(5)
-        .expectNext("e-3")
-        .expectComplete() // e-4 not seen
     }
 
     "only deliver what requested if there is more in the buffer" in {
-      setup("f", 1000)
+      setup("f", 1000) { _ =>
+        val src = queries.currentEventsByPersistenceId("f", 0L, Long.MaxValue)
+        val probe = src
+          .map(_.event)
+          .runWith(TestSink.probe[Any])
+          .request(2)
+          .expectNext("f-1", "f-2")
+          .expectNoMessage(noMsgTimeout)
 
-      val src = queries.currentEventsByPersistenceId("f", 0L, Long.MaxValue)
-      val probe = src
-        .map(_.event)
-        .runWith(TestSink.probe[Any])
-        .request(2)
-        .expectNext("f-1", "f-2")
-        .expectNoMessage(noMsgTimeout)
+        probe
+          .expectNoMessage(noMsgTimeout)
+          .request(5)
+          .expectNext("f-3", "f-4", "f-5", "f-6", "f-7")
+          .expectNoMessage(noMsgTimeout)
 
-      probe
-        .expectNoMessage(noMsgTimeout)
-        .request(5)
-        .expectNext("f-3", "f-4", "f-5", "f-6", "f-7")
-        .expectNoMessage(noMsgTimeout)
-
-      probe
-        .request(5)
-        .expectNext("f-8", "f-9", "f-10", "f-11", "f-12")
-        .expectNoMessage(noMsgTimeout)
+        probe
+          .request(5)
+          .expectNext("f-8", "f-9", "f-10", "f-11", "f-12")
+          .expectNoMessage(noMsgTimeout)
+      }
     }
 
     "stop if there are no events" in {
@@ -149,46 +158,47 @@ class EventsByPersistenceIdSpec
     }
 
     "produce correct sequence of sequence numbers and offsets" in {
-      setup("h", 3)
-
-      val src = queries.currentEventsByPersistenceId("h", 0L, Long.MaxValue)
-      src
-        .map(x => (x.persistenceId, x.sequenceNr, x.offset))
-        .runWith(TestSink.probe[Any])
-        .request(4)
-        .expectNext(("h", 1, Offset.sequence(1)), ("h", 2, Offset.sequence(2)), ("h", 3, Offset.sequence(3)))
-        .expectComplete()
+      setup("h", 3) { _ =>
+        val src = queries.currentEventsByPersistenceId("h", 0L, Long.MaxValue)
+        src
+          .map(x => (x.persistenceId, x.sequenceNr, x.offset))
+          .runWith(TestSink.probe[Any])
+          .request(4)
+          .expectNext(("h", 1, Offset.sequence(1)), ("h", 2, Offset.sequence(2)), ("h", 3, Offset.sequence(3)))
+          .expectComplete()
+      }
     }
 
     "produce correct sequence of events across multiple partitions" in {
-      setup("i", 20)
-
-      val src = queries.currentEventsByPersistenceId("i", 0L, Long.MaxValue)
-      src
-        .map(_.event)
-        .runWith(TestSink.probe[Any])
-        .request(10)
-        .expectNextN((1 to 10).map(i => s"i-$i"))
-        .expectNoMessage(noMsgTimeout)
-        .request(11)
-        .expectNextN((11 to 20).map(i => s"i-$i"))
-        .expectComplete()
+      setup("i", 20) { _ =>
+        val src = queries.currentEventsByPersistenceId("i", 0L, Long.MaxValue)
+        src
+          .map(_.event)
+          .runWith(TestSink.probe[Any])
+          .request(10)
+          .expectNextN((1 to 10).map(i => s"i-$i"))
+          .expectNoMessage(noMsgTimeout)
+          .request(11)
+          .expectNextN((11 to 20).map(i => s"i-$i"))
+          .expectComplete()
+      }
     }
 
     "stop at last event in partition" in {
-      setup("i2", 15) // partition size is 15
+      setup("i2", 15) { _ => // partition size is 15
 
-      val src = queries.currentEventsByPersistenceId("i2", 0L, Long.MaxValue)
-      src
-        .map(_.event)
-        .runWith(TestSink.probe[Any])
-        .request(100)
-        .expectNextN((1 to 15).map(i => s"i2-$i"))
-        .expectComplete()
+        val src = queries.currentEventsByPersistenceId("i2", 0L, Long.MaxValue)
+        src
+          .map(_.event)
+          .runWith(TestSink.probe[Any])
+          .request(100)
+          .expectNextN((1 to 15).map(i => s"i2-$i"))
+          .expectComplete()
+      }
     }
 
     "find all events when PersistAll spans partition boundaries" in {
-      val ref = setup("i3", 10)
+      val ref = setup("i3", 10)(identity)
       // partition 0
       ref ! TestActor.PersistAll((11 to 15).map(i => s"i3-$i"))
       expectMsg("PersistAll-done")
@@ -201,40 +211,45 @@ class EventsByPersistenceIdSpec
       ref ! "i3-32"
       expectMsg("i3-32-done")
 
-      val src = queries.currentEventsByPersistenceId("i3", 0L, Long.MaxValue)
-      src
-        .map(_.event)
-        .runWith(TestSink.probe[Any])
-        .request(10)
-        .expectNextN((1 to 10).map(i => s"i3-$i"))
-        .expectNoMessage(noMsgTimeout)
-        .request(10)
-        .expectNextN((11 to 20).map(i => s"i3-$i"))
-        .request(100)
-        .expectNextN((21 to 32).map(i => s"i3-$i"))
-        .expectComplete()
+      awaitAssert(
+        {
+          val src = queries.currentEventsByPersistenceId("i3", 0L, Long.MaxValue)
+          src
+            .map(_.event)
+            .runWith(TestSink.probe[Any])
+            .request(10)
+            .expectNextN((1 to 10).map(i => s"i3-$i"))
+            .expectNoMessage(noMsgTimeout)
+            .request(10)
+            .expectNextN((11 to 20).map(i => s"i3-$i"))
+            .request(100)
+            .expectNextN((21 to 32).map(i => s"i3-$i"))
+            .expectComplete()
+        },
+        readOurOwnWritesTimeout
+      )
     }
 
     "complete when same number of events as page size" in {
       // TODO these hardcoded assignments of persistenceId is a mess, must be unique per test
-      setup("a2", queries.pageSize)
+      val pageSize = queries.settings.pageSize
+      setup("a2", pageSize) { _ =>
+        val src = queries.currentEventsByPersistenceId("a2", 0L, Long.MaxValue)
+        val probe = src
+          .map(_.event)
+          .runWith(TestSink.probe[Any])
+          .request(pageSize + 10L)
 
-      val src = queries.currentEventsByPersistenceId("a2", 0L, Long.MaxValue)
-      val probe = src
-        .map(_.event)
-        .runWith(TestSink.probe[Any])
-        .request(queries.pageSize + 10)
-
-      probe.expectNextN(queries.pageSize) should ===((1 to queries.pageSize).map(n => s"a2-$n").toList)
-      probe.expectComplete()
+        probe.expectNextN(pageSize.toLong) should ===((1 to pageSize).map(n => s"a2-$n").toList)
+        probe.expectComplete()
+      }
     }
-
   }
 
   "Couchbase live query EventsByPersistenceId" must {
 
     "find new events" in {
-      val ref = setup("j", 3)
+      val ref = setup("j", 3)(identity)
       val src = queries.eventsByPersistenceId("j", 0L, Long.MaxValue)
       val probe = src
         .map(_.event)
@@ -250,7 +265,7 @@ class EventsByPersistenceIdSpec
     }
 
     "find new events if the stream starts after current latest event" in {
-      val ref = setup("k", 4)
+      val ref = setup("k", 4)(identity)
       val src = queries.eventsByPersistenceId("k", 5L, Long.MaxValue)
       val probe = src
         .map(_.sequenceNr)
@@ -273,7 +288,7 @@ class EventsByPersistenceIdSpec
     }
 
     "find new events up to a sequence number" in {
-      val ref = setup("l", 3)
+      val ref = setup("l", 3)(identity)
       val src = queries.eventsByPersistenceId("l", 0L, 4L)
       val probe = src
         .map(_.sequenceNr)
@@ -290,7 +305,7 @@ class EventsByPersistenceIdSpec
     }
 
     "find new events after demand request" in {
-      val ref = setup("m", 3)
+      val ref = setup("m", 3)(identity)
       val src = queries.eventsByPersistenceId("m", 0L, Long.MaxValue)
       val probe = src
         .map(_.event)
@@ -312,7 +327,7 @@ class EventsByPersistenceIdSpec
     }
 
     "only deliver what requested if there is more in the buffer" in {
-      setup("n", 1000)
+      setup("n", 1000)(identity)
 
       val src = queries.eventsByPersistenceId("n", 0L, Long.MaxValue)
       val probe = src
@@ -337,7 +352,7 @@ class EventsByPersistenceIdSpec
     }
 
     "not produce anything if there aren't any events" in {
-      setup("o2", 1) // Database init.
+      setup("o2", 1)(identity) // Database init.
       val src = queries.eventsByPersistenceId("o", 0L, Long.MaxValue)
 
       val probe = src
@@ -350,7 +365,7 @@ class EventsByPersistenceIdSpec
     }
 
     "not produce anything until there are existing events" in {
-      setup("p2", 1) // Database init.
+      setup("p2", 1)(identity) // Database init.
       val src = queries.eventsByPersistenceId("p", 0L, Long.MaxValue)
 
       val probe = src
@@ -359,7 +374,7 @@ class EventsByPersistenceIdSpec
         .request(2)
         .expectNoMessage(noMsgTimeout)
 
-      setup("p", 2)
+      setup("p", 2)(identity)
 
       probe
         .expectNext("p-1", "p-2")
@@ -369,7 +384,7 @@ class EventsByPersistenceIdSpec
     }
 
     "produce correct sequence of events across multiple partitions" in {
-      val ref = setup("q", 15)
+      val ref = setup("q", 15)(identity)
 
       val src = queries.eventsByPersistenceId("q", 0L, Long.MaxValue)
 
@@ -402,7 +417,7 @@ class EventsByPersistenceIdSpec
     }
 
     "find all events when PersistAll spans partition boundaries" in {
-      val ref = setup("q2", 10)
+      val ref = setup("q2", 10)(identity)
       // partition 0
       ref ! TestActor.PersistAll((11 to 15).map(i => s"q2-$i"))
       expectMsg("PersistAll-done")

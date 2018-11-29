@@ -2,26 +2,23 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package akka.persistence.couchbase
+package akka.persistence.couchbase.internal
 
 import java.util.Base64
 
-import akka.Done
 import akka.actor.{ActorSystem, ExtendedActorSystem}
 import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
 import akka.persistence.PersistentRepr
 import akka.persistence.couchbase.CouchbaseJournal.TaggedPersistentRepr
+import akka.persistence.couchbase._
 import akka.serialization.{AsyncSerializer, Serialization, Serializers}
-import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.util.OptionVal
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
-import com.couchbase.client.java.query.dsl.Expression._
-import com.couchbase.client.java.query.Select.select
 
-import scala.collection.immutable
 import scala.collection.JavaConverters._
+import scala.collection.immutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -38,7 +35,6 @@ private[akka] final object CouchbaseSchema {
     /*
        Sample doc structure:
        {
-         "ordering": 1542205420991,
          "sequence_to": 1,
          "all_tags": [],
          "messages": [
@@ -49,7 +45,13 @@ private[akka] final object CouchbaseSchema {
              // either of these two depending on serializer
              "payload_bin": "rO0ABXQACHAyLWV2dC0x",
              "payload": { json- }
-             "tags": []
+             // these two fielsds are only present if there are any tags
+             "tags": [ "tag1", "tag2" ]
+             // the format of the data is the time based UUID represented as (time in utc)
+             // [YYYY]-[MM]-[DD]T[HH]:[mm]:[ss]:[nanoOfSecond]_[lsb-unsigned-long-as-space-padded-string]
+             // see akka.persistence.couchbase.internal.TimeBasedUUIDSerialization
+             // which makes it possible to sort as a string field and get the same order as sorting the actual time based UUIDs
+             "ordering": "1582-10-16T18:52:02.434002368_ 7093823767347982046",
            }
          ],
          "writer_uuid": "d61a4212-518a-4f75-8f27-2150f56ae60f",
@@ -58,22 +60,24 @@ private[akka] final object CouchbaseSchema {
          "persistence_id": "p2"
        }
      */
+
+    // === per doc ===
     val PersistenceId = "persistence_id"
-    val SequenceNr = "sequence_nr"
     // when a multi message insert is done, this will contain the sequence number range
     val SequenceFrom = "sequence_from"
     val SequenceTo = "sequence_to"
+    val WriterUuid = "writer_uuid"
+    val Messages = "messages"
+
+    // === per message/event ===
+    val SequenceNr = "sequence_nr"
+    // A field to sort in a globally consistent way on, for events by tags, based on the UUID
     val Ordering = "ordering"
-    val Timestamp = "timestamp"
     // separate fields for json and base64 bin payloads
     val JsonPayload = "payload"
     val BinaryPayload = "payload_bin"
-    val WriterUuid = "writer_uuid"
-    val Messages = "messages"
     // the specific tags on an individual message
     val Tags = "tags"
-    // union of all tags on an atomic write with multiple events
-    val AllTags = "all_tags"
 
     // metadata object fields
     /*
@@ -103,6 +107,7 @@ private[akka] final object CouchbaseSchema {
 
     val SerializerManifest = "ser_manifest"
     val SerializerId = "ser_id"
+    val Timestamp = "timestamp"
   }
 
   val MetadataEntryType = "journal_metadata"
@@ -158,6 +163,27 @@ private[akka] final object CouchbaseSchema {
     )
   }
 
+  def deserializeTaggedEvent(
+      value: JsonObject,
+      toSequenceNr: Long,
+      serialization: Serialization
+  )(implicit ec: ExecutionContext, system: ActorSystem): Future[TaggedPersistentRepr] = {
+    val persistenceId = value.getString(Fields.PersistenceId)
+    val writerUuid = value.getString(Fields.WriterUuid)
+    val sequenceNr = value.getLong(Fields.SequenceNr)
+    val tags: Set[String] = value.getArray(Fields.Tags).asScala.map(_.toString).toSet
+    SerializedMessage.fromJsonObject(serialization, value).map { payload =>
+      CouchbaseJournal.TaggedPersistentRepr(
+        PersistentRepr(payload = payload,
+                       sequenceNr = sequenceNr,
+                       persistenceId = persistenceId,
+                       writerUuid = writerUuid),
+        tags,
+        TimeBasedUUIDSerialization.fromSortableString(value.getString(Fields.Ordering))
+      )
+    }
+  }
+
   def extractEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization)(
       implicit system: ActorSystem
   ): Future[PersistentRepr] = {
@@ -168,56 +194,6 @@ private[akka] final object CouchbaseSchema {
     }(ExecutionContexts.sameThreadExecutionContext)
   }
 
-  def extractTaggedEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization)(
-      implicit ec: ExecutionContext,
-      system: ActorSystem
-  ): Future[TaggedPersistentRepr] =
-    SerializedMessage.fromJsonObject(serialization, event).map { payload =>
-      val sequenceNr = event.getLong(Fields.SequenceNr)
-      val tags: Set[AnyRef] = event.getArray(Fields.Tags).toList.asScala.toSet
-      CouchbaseJournal.TaggedPersistentRepr(
-        PersistentRepr(payload = payload, sequenceNr = sequenceNr, persistenceId = pid, writerUuid = writerUuid),
-        tags.map(_.toString)
-      )
-    }
-
-  // NOTE: These aren't actually used, since it seems close to impossible to guarantee the index is ready/done
-  // but let's keep them around for now anyway and potentially move them into a testing utility at some point
-
-  /**
-   * Creates the indexes that the journal needs for replay
-   *
-   * @return true if the index is already existed, otherwise false
-   */
-  def createRequiredWriteJournalIndexes(session: CouchbaseSession)(implicit ec: ExecutionContext): Future[Done] =
-    // CREATE INDEX `pi` ON `akka`(`persistence_id`,`sequence_from`)
-    session
-      .createIndex("pi", true, Fields.PersistenceId, Fields.SequenceFrom)
-      .flatMap { creating =>
-        if (creating) waitForIndexesToBeOnline(session)
-        else Future.successful(Done)
-      }
-
-  def createRequiredReadJournalIndexes(session: CouchbaseSession)(implicit ec: ExecutionContext): Future[Done] =
-    createRequiredWriteJournalIndexes(session)
-      .flatMap { _ =>
-        // `tags` ON `akka`((all (`all_tags`)),`ordering`);
-        session.createIndex("tags", true, x(s"all (`${Fields.AllTags}`)"), Fields.Ordering)
-      }
-      .flatMap { creating =>
-        if (creating) waitForIndexesToBeOnline(session)
-        else Future.successful(Done)
-      }
-
-  private def waitForIndexesToBeOnline(session: CouchbaseSession)(implicit ec: ExecutionContext): Future[Done] =
-    session
-      .singleResponseQuery(select("*").from("system:indexes").where(x("status").ne(x("online"))))
-      .flatMap {
-        case Some(idx) =>
-          println("index not ready")
-          waitForIndexesToBeOnline(session)
-        case None => Future.successful(Done)
-      }
 }
 
 /**

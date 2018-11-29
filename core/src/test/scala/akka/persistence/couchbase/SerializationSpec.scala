@@ -5,6 +5,7 @@
 package akka.persistence.couchbase
 
 import akka.actor.{ActorSystem, ExtendedActorSystem}
+import akka.persistence.couchbase.internal.{CouchbaseSchema, SerializedMessage}
 import akka.serialization.{AsyncSerializerWithStringManifest, SerializationExtension}
 import akka.testkit.TestKit
 import com.couchbase.client.java.document.json.JsonObject

@@ -4,10 +4,13 @@
 
 package akka.persistence.couchbase
 
+import java.util.UUID
+
 import akka.NotUsed
 import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
 import akka.event.Logging
+import akka.persistence.couchbase.internal._
 import akka.persistence.journal.{AsyncWriteJournal, Tagged}
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializationExtension}
@@ -35,7 +38,7 @@ import scala.util.{Failure, Success, Try}
 @InternalApi
 private[akka] object CouchbaseJournal {
 
-  case class TaggedPersistentRepr(pr: PersistentRepr, tags: Set[String])
+  case class TaggedPersistentRepr(pr: PersistentRepr, tags: Set[String], offset: UUID)
 
   private val ExtraSuccessFulUnit: Try[Unit] = Success(())
 
@@ -48,7 +51,7 @@ private[akka] object CouchbaseJournal {
 class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJournal with AsyncCouchbaseSession {
 
   import CouchbaseJournal._
-  import CouchbaseSchema.Fields
+  import akka.persistence.couchbase.internal.CouchbaseSchema.Fields
 
   private val log = Logging(this)
   protected implicit val system = context.system
@@ -56,6 +59,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
 
   private val serialization: Serialization = SerializationExtension(system)
   private implicit val materializer = ActorMaterializer()(context)
+  private val uuidGenerator = UUIDGenerator()
 
   private val settings: CouchbaseJournalSettings = {
     // shared config is one level above the journal specific
@@ -129,29 +133,31 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     }
 
   private def atomicWriteToJsonDoc(write: AtomicWrite): Future[JsonDocument] = {
-    val serializedMessages: Future[Seq[JsonObject]] = Future.sequence(write.payload.map { persistentRepr =>
-      val (event, tags) = persistentRepr.payload match {
-        case t: Tagged => (t.payload.asInstanceOf[AnyRef], t.tags)
-        case other => (other.asInstanceOf[AnyRef], Set.empty[String])
-      }
-      SerializedMessage.serialize(serialization, event).map { message =>
-        CouchbaseSchema
-          .serializedMessageToObject(message)
-          .put(Fields.Tags, JsonArray.from(tags.toList.asJava))
-          .put(Fields.SequenceNr, persistentRepr.sequenceNr)
-      }
+    val serializedMessages: Future[Seq[JsonObject]] = Future.sequence(write.payload.map {
+      persistentRepr =>
+        val (event, tags) = persistentRepr.payload match {
+          case t: Tagged => (t.payload.asInstanceOf[AnyRef], t.tags)
+          case other => (other.asInstanceOf[AnyRef], Set.empty[String])
+        }
+        SerializedMessage.serialize(serialization, event).map { message =>
+          val json = CouchbaseSchema
+            .serializedMessageToObject(message)
+            .put(Fields.SequenceNr, persistentRepr.sequenceNr)
+
+          if (tags.nonEmpty) {
+            // Event UUID is stored in string field that sorts the same as the in-JVM uuid comparator
+            // allowing us to query and sort tagged events server side
+            val timeBasedUUID = uuidGenerator.nextUuid()
+            json.put(Fields.Tags, JsonArray.from(tags.toList.asJava))
+            json.put(Fields.Ordering, TimeBasedUUIDSerialization.toSortableString(timeBasedUUID))
+          }
+
+          json
+        }
     })
     serializedMessages.map { messagesJson =>
       val pid = write.persistenceId
-      // collect all tags for the events and put in the surrounding
-      // object for simple indexing on tags
-      val allTags = write.payload.iterator
-        .map(_.payload)
-        .collect {
-          case t: Tagged => t.tags
-        }
-        .flatten
-        .toSet
+
       val insert: JsonObject = JsonObject
         .create()
         .put(Fields.Type, CouchbaseSchema.JournalEntryType)
@@ -161,9 +167,7 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
         .put(Fields.SequenceFrom, write.lowestSequenceNr)
         .put(Fields.SequenceTo, write.highestSequenceNr)
         .put(Fields.Messages, JsonArray.from(messagesJson.asJava))
-        .put(Fields.AllTags, JsonArray.from(allTags.toList.asJava))
-        // FIXME temporary ordering solution #66
-        .put(Fields.Ordering, System.currentTimeMillis())
+
       JsonDocument.create(s"$pid-${write.lowestSequenceNr}", insert)
     }(ExecutionContexts.sameThreadExecutionContext)
   }

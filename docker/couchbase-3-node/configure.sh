@@ -41,7 +41,8 @@ if [ "$TYPE" = "MASTER" ]; then
   # Create indexes
   log "Create bucket indices ........."
   cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`pi2\` ON \`akka\`((self.\`persistence_id\`),(self.\`sequence_from\`));"
-  cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`tags\` ON \`akka\`((all (\`all_tags\`)),\`ordering\`);"
+  cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`tags\` ON \`akka\` (ALL ARRAY m.tags FOR m IN messages END);"
+  cbq -u $USERNAME -p $PASSWORD -s "CREATE INDEX \`tags-ordering\` ON \`akka\` (DISTINCT ARRAY m.ordering FOR m IN messages END);"
 
   # rebalance once the other two nodes are added
   log "Sleeping to give time for replicas to join"

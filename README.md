@@ -86,7 +86,10 @@ CREATE INDEX `pi2` ON `akka`((self.`persistence_id`),(self.`sequence_from`));
 If you will be using the query side with event-for-tags the following will also be required:
 
 ```
-CREATE INDEX `tags` ON `akka`((all (`all_tags`)),`ordering`);
+CREATE INDEX `tags` ON `akka` 
+  (ALL ARRAY m.tags FOR m IN messages END)
+CREATE INDEX `tags-ordering` ON `akka` 
+  (DISTINCT ARRAY m.ordering FOR m IN messages END)
 ```
 
 ## Serialization
@@ -129,6 +132,10 @@ val queries = PersistenceQuery(system).readJournalFor[CouchbaseReadJournal](Couc
 
 The connection settings are shared with the read journal, see above
 
+### Caveats
+
+ * As the indexes used to perform the queries are eventually consistent (even for a single writer node) there 
+   is no guarantee that an immediate query will see the latest writes.
 
 
 ## Developing the plugins

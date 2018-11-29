@@ -8,11 +8,14 @@ import akka.actor.ActorSystem
 import akka.persistence.query.scaladsl.EventsByTagQuery
 import akka.persistence.query.{EventEnvelope, NoOffset, PersistenceQuery}
 import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.Sink
 import akka.stream.testkit.TestSubscriber
 import akka.stream.testkit.scaladsl.TestSink
 import akka.testkit.{TestKit, TestProbe}
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike}
 
+import scala.collection.immutable
 import scala.concurrent.duration._
 
 class CouchbaseReadJournalSpec
@@ -20,8 +23,13 @@ class CouchbaseReadJournalSpec
     with WordSpecLike
     with BeforeAndAfterAll
     with Matchers
+    with ScalaFutures
     with CouchbaseBucketSetup
     with BeforeAndAfterEach {
+
+  override implicit def patienceConfig = PatienceConfig(testKitSettings.DefaultTimeout.duration, 50.millis)
+
+  private val readOurOwnWritesTimeout = 10.seconds
 
   protected override def afterAll(): Unit = {
     super.afterAll()
@@ -46,11 +54,16 @@ class CouchbaseReadJournalSpec
       pa2 ! "p2-evt-1"
       senderProbe.expectMsg("p2-evt-1-done")
 
-      val probe: TestSubscriber.Probe[String] = queries.currentPersistenceIds().runWith(TestSink.probe)
+      awaitAssert(
+        {
+          val probe: TestSubscriber.Probe[String] = queries.currentPersistenceIds().runWith(TestSink.probe)
 
-      probe.requestNext("p1")
-      probe.requestNext("p2")
-      probe.expectComplete()
+          probe.requestNext("p1")
+          probe.requestNext("p2")
+          probe.expectComplete()
+        },
+        readOurOwnWritesTimeout
+      )
 
     }
   }
@@ -108,6 +121,7 @@ class CouchbaseReadJournalSpec
       val offs = probe1.expectNextPF { case e @ EventEnvelope(_, "a", 4L, "a green banana") => e }.offset
       probe1.cancel()
 
+      // result from offset should be exclusive - see akka.persistence.query.TimeBasedUUID scaladoc
       system.log.info("Starting from offset {}", offs)
       val greenSrc2 = queries.eventsByTag(tag = "green", offs)
       val probe2 = greenSrc2.runWith(TestSink.probe[Any])
@@ -164,16 +178,22 @@ class CouchbaseReadJournalSpec
 
       system.log.info("Writes complete, starting current queries")
 
-      val blueSrc = queries.currentEventsByTag(tag = "blue", offset = NoOffset)
-      val probe = blueSrc.runWith(TestSink.probe[Any])
-      probe.request(2)
-      probe.expectNextPF { case e @ EventEnvelope(_, "a1", 2L, "a blue kiwi") => e }
-      probe.expectNextPF { case e @ EventEnvelope(_, "a1", 4L, "a blue banana") => e }
+      // no guarantee we can immediately read our own writes
+      awaitAssert(
+        {
+          val blueSrc = queries.currentEventsByTag(tag = "blue", offset = NoOffset)
+          val probe = blueSrc.runWith(TestSink.probe[Any])
+          probe.request(2)
+          probe.expectNextPF { case e @ EventEnvelope(_, "a1", 2L, "a blue kiwi") => e }
+          probe.expectNextPF { case e @ EventEnvelope(_, "a1", 4L, "a blue banana") => e }
 
-      probe.expectNoMessage(500.millis)
-      probe.request(2)
-      probe.expectNextPF { case e @ EventEnvelope(_, "b1", 1L, "a blue leaf") => e }
-      probe.expectComplete()
+          probe.expectNoMessage(500.millis)
+          probe.request(2)
+          probe.expectNextPF { case e @ EventEnvelope(_, "b1", 1L, "a blue leaf") => e }
+          probe.expectComplete()
+        },
+        readOurOwnWritesTimeout
+      )
 
       val pinkSrc = queries.currentEventsByTag(tag = "pink", offset = NoOffset)
       val probe2 = pinkSrc.runWith(TestSink.probe[Any])
@@ -186,6 +206,90 @@ class CouchbaseReadJournalSpec
       probe3.request(5)
       probe3.expectNextPF { case e @ EventEnvelope(_, "a1", 2L, "a blue kiwi") => e }
       probe3.expectComplete()
+    }
+
+    "find existing events with an offset into a batch" in {
+      val senderProbe = TestProbe()
+      implicit val sender = senderProbe.ref
+      val z = system.actorOf(TestActor.props("z1"))
+
+      z ! "hello"
+      senderProbe.expectMsg(20.seconds, s"hello-done")
+      z ! TestActor.PersistAll(List("a red kiwi", "a yellow car", "a red bottle", "a yellow piranha"))
+      senderProbe.expectMsg(s"PersistAll-done")
+
+      system.log.info("Writes complete, starting current queries")
+
+      // no guarantee we can immediately read our own writes
+      val offset = awaitAssert(
+        {
+          val firstReds: immutable.Seq[EventEnvelope] =
+            queries
+              .currentEventsByTag(tag = "red", offset = NoOffset)
+              .take(1)
+              .runWith(Sink.seq)
+              .futureValue
+
+          firstReds should have size (1)
+          firstReds.head match {
+            case EventEnvelope(offset, "z1", _, "a red kiwi") => offset
+          }
+        },
+        readOurOwnWritesTimeout
+      )
+
+      // offset into the same batch write
+      val redsFromOffset =
+        queries
+          .currentEventsByTag(tag = "red", offset = offset)
+          .runWith(Sink.seq)
+          .futureValue
+      redsFromOffset should have size (1)
+      redsFromOffset.head should matchPattern { case EventEnvelope(_, "z1", _, "a red bottle") => }
+    }
+
+    "find existing events with an offset into multiple batches" in {
+      val senderProbe = TestProbe()
+      implicit val sender = senderProbe.ref
+      val x = system.actorOf(TestActor.props("x1"))
+      val v = system.actorOf(TestActor.props("v1"))
+
+      x ! "hello"
+      senderProbe.expectMsg(20.seconds, s"hello-done")
+      v ! "hello"
+      senderProbe.expectMsg(20.seconds, s"hello-done")
+      x ! TestActor.PersistAll(List("a purple kiwi", "a yellow car", "a purple bottle", "a yellow piranha"))
+      v ! TestActor.PersistAll(List("a purple balloon", "a yellow bike", "a purple bowl", "a yellow dolphin"))
+      senderProbe.expectMsg(s"PersistAll-done")
+
+      system.log.info("Writes complete, starting current queries")
+
+      // no guarantee we can immediately read our own writes
+      val firstPurples: immutable.Seq[EventEnvelope] =
+        awaitAssert(
+          {
+            val res = queries
+              .currentEventsByTag(tag = "purple", offset = NoOffset)
+              .take(3)
+              .runWith(Sink.seq)
+              .futureValue
+
+            res should have size (3)
+            res
+          },
+          readOurOwnWritesTimeout
+        )
+
+      // offset must be inside second batch of either actor
+      val purplesFromOffset =
+        queries
+          .currentEventsByTag(tag = "purple", offset = firstPurples(2).offset)
+          .runWith(Sink.seq)
+          .futureValue
+      purplesFromOffset should have size (1)
+
+      val allRead = (firstPurples ++ purplesFromOffset).map(_.event.toString).toSet
+      allRead should ===(Set("a purple kiwi", "a purple balloon", "a purple bottle", "a purple bowl"))
     }
   }
 }
