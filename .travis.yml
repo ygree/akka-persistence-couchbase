@@ -46,6 +46,12 @@ jobs:
     - env:
         - PRE_CMD="docker-compose -f docker/couchbase-1-node/docker-compose.yml up -d couchbase"
         - CMD=lagom-persistence-couchbase-scaladsl/test
+    - env:
+        - PRE_CMD="docker-compose -f docker/couchbase-1-node/docker-compose.yml up -d couchbase"
+        - CMD=lagom-persistence-couchbase-javadsl/multi-jvm:test
+    - env:
+        - PRE_CMD="docker-compose -f docker/couchbase-1-node/docker-compose.yml up -d couchbase"
+        - CMD=lagom-persistence-couchbase-scaladsl/multi-jvm:test
 
     - stage: publish
       script: sbt +publish

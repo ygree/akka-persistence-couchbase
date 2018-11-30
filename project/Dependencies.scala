@@ -36,6 +36,7 @@ object Dependencies {
     val akkaPersistenceTck = "com.typesafe.akka" %% "akka-persistence-tck" % AkkaVersion % "test"
     val akkaTestkit = "com.typesafe.akka" %% "akka-testkit" % AkkaVersion % "test"
     val akkaStreamTestkit = "com.typesafe.akka" %% "akka-stream-testkit" % AkkaVersion % "test"
+    val akkaMultiNodeTestkit = "com.typesafe.akka" %% "akka-multi-node-testkit" % AkkaVersion % "test"
 
     val logback = "ch.qos.logback" % "logback-classic" % "1.2.3" % "test" // EPL 1.0 / LGPL 2.1
     val scalaTest = "org.scalatest" %% "scalatest" % "3.0.4" % "test" // ApacheV2
@@ -79,7 +80,8 @@ object Dependencies {
     lagomPersistenceScalaDsl,
     lagomPersistenceJavaDsl,
     akkaTestkit,
-    scalaTest
+    scalaTest,
+    akkaMultiNodeTestkit
   )
 
   val `lagom-persistence-couchbase-core` = Seq(

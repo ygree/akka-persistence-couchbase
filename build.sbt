@@ -1,3 +1,6 @@
+import com.typesafe.sbt.MultiJvmPlugin.MultiJvmKeys
+import com.typesafe.sbt.SbtMultiJvm
+
 def common: Seq[Setting[_]] = Seq(
   organization := "com.lightbend.akka",
   organizationName := "Lightbend Inc.",
@@ -58,6 +61,12 @@ def common: Seq[Setting[_]] = Seq(
   parallelExecution in Test := false,
   fork := true
 )
+
+def multiJvmTestSettings: Seq[Setting[_]] =
+  SbtMultiJvm.multiJvmSettings ++ Seq(
+    // `database.port` required for multi-dc tests that extend AbstractClusteredPersistentEntityConfig
+    MultiJvmKeys.jvmOptions in MultiJvm := Seq("-Ddatabase.port=0")
+  )
 
 lazy val root = (project in file("."))
   .settings(common)
@@ -137,6 +146,9 @@ lazy val `lagom-persistence-couchbase-javadsl` = (project in file("lagom-persist
     name := "lagom-javadsl-persistence-couchbase",
     libraryDependencies := Dependencies.`lagom-persistence-couchbase-javadsl`
   )
+  .enablePlugins(MultiJvmPlugin)
+  .configs(MultiJvm)
+  .settings(multiJvmTestSettings: _*)
 
 lazy val `lagom-persistence-couchbase-scaladsl` = (project in file("lagom-persistence-couchbase/scaladsl"))
   .dependsOn(
@@ -150,3 +162,6 @@ lazy val `lagom-persistence-couchbase-scaladsl` = (project in file("lagom-persis
     name := "lagom-scaladsl-persistence-couchbase",
     libraryDependencies := Dependencies.`lagom-persistence-couchbase-scaladsl`
   )
+  .enablePlugins(MultiJvmPlugin)
+  .configs(MultiJvm)
+  .settings(multiJvmTestSettings: _*)
