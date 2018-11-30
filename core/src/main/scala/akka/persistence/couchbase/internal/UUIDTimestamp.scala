@@ -24,6 +24,7 @@ private[akka] object UUIDTimestamp {
   private val UUIDUnitsPerMs = 10000
 
   val MinVal = UUIDTimestamp(0L) // as the long is signed
+  val MaxVal = UUIDTimestamp(Long.MaxValue) // as the long is signed
 
   def now(): UUIDTimestamp = fromUnixTimestamp(System.currentTimeMillis())
 

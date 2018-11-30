@@ -26,6 +26,7 @@ import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
 import com.typesafe.config.Config
 
 import scala.concurrent.Future
+import scala.concurrent.duration.Duration
 
 object CouchbaseReadJournal {
   final val Identifier = "couchbase-journal.read"
@@ -77,7 +78,7 @@ object CouchbaseReadJournal {
     s"""
       |SELECT a.persistence_id, m.* FROM ${settings.bucket} a UNNEST messages AS m
       |WHERE ARRAY_CONTAINS(m.tags, $$tag) = true
-      |AND m.ordering > $$ordering
+      |AND m.ordering > $$fromOffset AND m.ordering <= $$toOffset
       |ORDER BY m.ordering
       |limit $$limit
     """.stripMargin
@@ -165,12 +166,29 @@ object CouchbaseReadJournal {
 
       log.debug("events by tag: live {}, tag: {}, offset: {}", live, tag, initialOrderingString)
 
-      def params(fromOffset: String): JsonObject =
+      def endOffset: String = {
+        val uuid =
+          if (settings.eventByTagSettings.eventualConsistencyDelay > Duration.Zero) {
+            // offset delay ms back in time from now
+            TimeBasedUUIDs.create(
+              UUIDTimestamp.fromUnixTimestamp(
+                System.currentTimeMillis() - (settings.eventByTagSettings.eventualConsistencyDelay.toMillis)
+              ),
+              TimeBasedUUIDs.MinLSB
+            )
+          } else TimeBasedUUIDs.MaxUUID
+
+        TimeBasedUUIDSerialization.toSortableString(uuid)
+      }
+
+      def params(fromOffset: String, toOffset: String): JsonObject =
         JsonObject
           .create()
           .put("tag", tag)
           .put("ordering", fromOffset)
           .put("limit", settings.pageSize)
+          .put("fromOffset", fromOffset)
+          .put("toOffset", toOffset)
 
       // note that the result is "unnested" into the message objects + the persistence id, so the normal
       // document structure does not apply here
@@ -180,10 +198,10 @@ object CouchbaseReadJournal {
             new N1qlQueryStage[String](
               live,
               settings.pageSize,
-              N1qlQuery.parameterized(eventsByTagQuery, params(initialOrderingString)),
+              N1qlQuery.parameterized(eventsByTagQuery, params(initialOrderingString, endOffset)),
               session.underlying,
               initialOrderingString,
-              ordering => Some(N1qlQuery.parameterized(eventsByTagQuery, params(ordering))), { (_, row) =>
+              ordering => Some(N1qlQuery.parameterized(eventsByTagQuery, params(ordering, endOffset))), { (_, row) =>
                 row.value().getString(Fields.Ordering)
               }
             )
@@ -231,9 +249,8 @@ object CouchbaseReadJournal {
     // to do the live queries
     // this can fail as it relies on async updates to the index.
     val query = select(distinct(Fields.PersistenceId)).from(settings.bucket).where(x(Fields.PersistenceId).isNotNull)
-    val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
-
-    session.streamedQuery(N1qlQuery.simple(query, queryParams)).map(_.getString(Fields.PersistenceId))
+    // FIXME respect page size for this query as well?
+    session.streamedQuery(N1qlQuery.simple(query)).map(_.getString(Fields.PersistenceId))
   }
 
   /*

@@ -49,7 +49,7 @@ class UUIDSpec extends WordSpec with Matchers with ScalaFutures {
       val pastMinLsb = TimeBasedUUIDs.create(UUIDTimestamp.fromUnixTimestamp(1543410889L), TimeBasedUUIDs.MinLSB)
       val pastMaxLsb = TimeBasedUUIDs.create(UUIDTimestamp.fromUnixTimestamp(1543410889L), TimeBasedUUIDs.MaxLSB)
       val now = generator.nextUuid()
-      val endOfTime = TimeBasedUUIDs.create(UUIDTimestamp(Long.MaxValue), TimeBasedUUIDs.MaxLSB)
+      val endOfTime = TimeBasedUUIDs.MaxUUID
 
       // (already in sorted order)
       val uuids = List(min, justABitBiggerThanMin, pastMinLsb, pastMaxLsb, now, endOfTime)

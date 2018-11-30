@@ -20,6 +20,7 @@ import akka.annotation.InternalApi
   val MaxLSB = 0x7f7f7f7f7f7f7f7fL
 
   val MinUUID = create(UUIDTimestamp.MinVal, MinLSB)
+  val MaxUUID = create(UUIDTimestamp.MaxVal, MaxLSB)
 
   def lsbFromNode(node: Long, clock: Int): Long = {
     var lsb = 0L

@@ -65,7 +65,7 @@ private[couchbase] final case class CouchbaseReadJournalSettings(sessionSettings
                                                                  bucket: String,
                                                                  pageSize: Int,
                                                                  eventByTagSettings: EventByTagSettings)
-final case class EventByTagSettings(eventualConsistencyDelay: FiniteDuration, verboseDebugLogging: Boolean)
+final case class EventByTagSettings(eventualConsistencyDelay: FiniteDuration)
 
 /**
  * INTERNAL API
@@ -82,8 +82,7 @@ private[couchbase] object CouchbaseReadJournalSettings {
 
     val eventByTagConfig = config.getConfig("read.events-by-tag")
     val eventByTagSettings = EventByTagSettings(
-      eventByTagConfig.getDuration("eventual-consistency-delay").toMillis.millis,
-      eventByTagConfig.getBoolean("verbose-debug-logging")
+      eventByTagConfig.getDuration("eventual-consistency-delay").toMillis.millis
     )
 
     CouchbaseReadJournalSettings(sessionSettings, bucket, pagesize, eventByTagSettings)
