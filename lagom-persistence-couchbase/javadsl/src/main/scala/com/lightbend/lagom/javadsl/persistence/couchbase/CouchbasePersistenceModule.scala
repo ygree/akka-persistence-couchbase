@@ -7,8 +7,9 @@ package com.lightbend.lagom.javadsl.persistence.couchbase
 import java.net.URI
 
 import akka.actor.ActorSystem
-import akka.persistence.couchbase.CouchbaseJournalSettings
+import akka.event.Logging
 import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
+import akka.stream.alpakka.couchbase.CouchbaseSessionSettings
 import com.google.inject.Provider
 import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{
   CouchbasePersistentEntityRegistry,
@@ -16,6 +17,7 @@ import com.lightbend.lagom.internal.javadsl.persistence.couchbase.{
   JavadslCouchbaseOffsetStore
 }
 import com.lightbend.lagom.internal.persistence.couchbase.{
+  CouchbaseConfigValidator,
   CouchbaseOffsetStore,
   ServiceLocatorAdapter,
   ServiceLocatorHolder
@@ -54,14 +56,25 @@ class CouchbasePersistenceModule extends Module {
 
 private[lagom] class CouchbaseProvider @Inject()(system: ActorSystem, cfg: Config) extends Provider[CouchbaseSession] {
 
-  private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(cfg.getConfig("couchbase-journal"))
+  private val log = Logging(system, classOf[CouchbaseProvider])
+
+  CouchbaseConfigValidator.validateBucket("lagom.persistence.read-side.couchbase", cfg, log)
+
+  private val readSideCouchbaseConfig: Config =
+    cfg.getConfig("lagom.persistence.read-side.couchbase")
+
+  private val sessionSettings = CouchbaseSessionSettings(
+    readSideCouchbaseConfig.getConfig("connection")
+  )
+
+  private val bucket = readSideCouchbaseConfig.getString("bucket")
 
   // FIXME is there a way to have async component creation in lagom instead of letting every component know that the thing is async?
   // if not we should pass Future[CouchbaseSession] around and let the use sites mix in AsyncCouchbaseSession - but if we use
   // that from Lagom it needs to be made public API
   // FIXME this should be the Java API of CouchbaseSession, when there is one
   lazy val couchbase: CouchbaseSession =
-    Await.result(CouchbaseSession.create(settings.sessionSettings, settings.bucket).toScala, 30.seconds)
+    Await.result(CouchbaseSession.create(sessionSettings, bucket).toScala, 30.seconds)
 
   override def get(): CouchbaseSession = couchbase
 }

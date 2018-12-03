@@ -8,7 +8,7 @@ import java.time.Duration
 import java.util.Optional
 import java.util.concurrent.CompletionStage
 
-import akka.annotation.{DoNotInherit, InternalApi}
+import akka.annotation.DoNotInherit
 import akka.dispatch.ExecutionContexts
 import akka.stream.alpakka.couchbase.internal.CouchbaseSessionJavaAdapter
 import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => ScalaDslCouchbaseSession}

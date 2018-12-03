@@ -11,6 +11,7 @@ import akka.actor.ActorSystem
 import akka.event.Logging
 import akka.persistence.couchbase.CouchbaseReadJournal
 import com.lightbend.lagom.internal.javadsl.persistence.AbstractPersistentEntityRegistry
+import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseConfigValidator
 import play.api.inject.Injector
 
 /**
@@ -22,7 +23,8 @@ private[lagom] final class CouchbasePersistentEntityRegistry @Inject()(system: A
 
   private val log = Logging.getLogger(system, getClass)
 
-  //TODO: validate Couchbase config
+  CouchbaseConfigValidator.validateBucket("couchbase-journal.write", system.settings.config, log)
+  CouchbaseConfigValidator.validateBucket("couchbase-journal.snapshot", system.settings.config, log)
 
   override protected val queryPluginId = Optional.of(CouchbaseReadJournal.Identifier)
 

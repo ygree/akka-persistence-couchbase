@@ -32,7 +32,11 @@ object TestConfig {
     "couchbase-journal.write.parallelism" -> new Integer(1),
     "couchbase-journal.write.write-timeout" -> "15s",
     "couchbase-journal.write.read-timeout" -> "15s",
-    "couchbase-journal.snapshot.bucket" -> "akka"
+    "couchbase-journal.snapshot.bucket" -> "akka",
+    "lagom.persistence.read-side.couchbase.bucket" -> "akka",
+    "lagom.persistence.read-side.couchbase.connection.nodes" -> List("").asJava,
+    "lagom.persistence.read-side.couchbase.connection.username" -> "admin",
+    "lagom.persistence.read-side.couchbase.connection.password" -> "admin1"
   )
 
   def persistenceConfig(): Config =

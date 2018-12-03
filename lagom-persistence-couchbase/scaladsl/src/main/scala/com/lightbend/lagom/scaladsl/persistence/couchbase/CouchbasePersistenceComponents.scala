@@ -4,10 +4,10 @@
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
-import akka.persistence.couchbase.CouchbaseJournalSettings
-import akka.stream.alpakka.couchbase.scaladsl
+import akka.event.Logging
+import akka.stream.alpakka.couchbase.{scaladsl, CouchbaseSessionSettings}
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
-import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
+import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseConfigValidator, CouchbaseOffsetStore}
 import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{
   CouchbasePersistentEntityRegistry,
   CouchbaseReadSideImpl,
@@ -21,6 +21,7 @@ import com.lightbend.lagom.scaladsl.persistence.{
   WriteSidePersistenceComponents
 }
 import com.lightbend.lagom.spi.persistence.OffsetStore
+import com.typesafe.config.Config
 
 import scala.concurrent.duration._
 import scala.concurrent.Await
@@ -50,15 +51,24 @@ trait WriteSideCouchbasePersistenceComponents extends WriteSidePersistenceCompon
  */
 trait ReadSideCouchbasePersistenceComponents extends ReadSidePersistenceComponents {
 
-  private val settings: CouchbaseJournalSettings = CouchbaseJournalSettings(
-    configuration.underlying.getConfig("couchbase-journal")
+  private val log = Logging(actorSystem, classOf[ReadSideCouchbasePersistenceComponents])
+
+  CouchbaseConfigValidator.validateBucket("lagom.persistence.read-side.couchbase", configuration.underlying, log)
+
+  private val readSideCouchbaseConfig: Config =
+    configuration.underlying.getConfig("lagom.persistence.read-side.couchbase")
+
+  private val sessionSettings = CouchbaseSessionSettings(
+    readSideCouchbaseConfig.getConfig("connection")
   )
+
+  private val bucket = readSideCouchbaseConfig.getString("bucket")
 
   // FIXME is there a way to have async component creation in lagom instead of letting every component know that the thing is async?
   // if not we should pass Future[CouchbaseSession] around and let the use sites mix in AsyncCouchbaseSession - but if we use
   // that from Lagom it needs to be made public API
   lazy val couchbase: CouchbaseSession =
-    Await.result(scaladsl.CouchbaseSession(settings.sessionSettings, settings.bucket), 30.seconds)
+    Await.result(scaladsl.CouchbaseSession(sessionSettings, bucket), 30.seconds)
 
   private[lagom] lazy val couchbaseOffsetStore: CouchbaseOffsetStore =
     new ScaladslCouchbaseOffsetStore(actorSystem, couchbase, readSideConfig)
