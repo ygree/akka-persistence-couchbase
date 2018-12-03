@@ -19,11 +19,8 @@ import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
-import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
 import com.couchbase.client.java.query.consistency.ScanConsistency
-import com.couchbase.client.java.query.dsl.Expression._
-import com.couchbase.client.java.query.dsl.Sort._
 import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
@@ -61,6 +58,10 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
   private implicit val materializer = ActorMaterializer()(context)
   private val uuidGenerator = UUIDGenerator()
 
+  // Without this the index that gets the latest sequence nr may have not seen the last write of the last version
+  // of this persistenceId. This seems overkill.
+  private val replayConsistency = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+
   private val settings: CouchbaseJournalSettings = {
     // shared config is one level above the journal specific
     val commonPath = configPath.replaceAll("""\.write$""", "")
@@ -75,34 +76,25 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
     context.stop(self)
   }
 
-  // TODO how horrific is this query?
-  // select persistenceId, sequence_from from akka where akka.persistenceId = "pid1" order by sequence_from desc limit 1
-  private val highestSequenceNrStatement = select(Fields.SequenceTo)
-    .from(settings.bucket)
-    .where(
-      x(Fields.PersistenceId)
-        .eq(x("$1"))
-        .and(x(Fields.SequenceFrom).gte(x("$2")))
-    )
-    .orderBy(desc(Fields.SequenceFrom))
-    .limit(1)
+  // TODO how horrific is this query, it does hit the index but it still needs to look at all results?
+  // seems to be at worst as fast as the previous ORDER BY + LIMIT 1 query at least
+  private val highestSequenceNrStatement =
+    s"""
+      |SELECT MAX(m.sequence_nr) AS max FROM ${settings.bucket} a UNNEST messages AS m
+      |WHERE a.type = "${CouchbaseSchema.JournalEntryType}"
+      |AND a.persistence_id = $$pid
+      |AND m.sequence_nr >= $$from
+    """.stripMargin
 
-  // FIXME, needs an orderby make sure index works with it
-  // select * from akka where akka.persistenceId = "pid1" and sequence_from >= start and sequenceFrom <= end
-  // can't be a val because we need to limit and that mutates the statement :/
-  private def replayStatement =
-    select("*")
-      .from(settings.bucket)
-      .where(
-        x(Fields.PersistenceId)
-          .eq(x("$1"))
-          .and(
-            x(Fields.SequenceFrom)
-              .gte(x("$2"))
-              .and(Fields.SequenceFrom)
-              .lte(x("$3"))
-          )
-      )
+  private val replayStatement =
+    s"""
+      |SELECT a.persistence_id, a.writer_uuid, m.* FROM ${settings.bucket} a UNNEST messages AS m
+      |WHERE a.type = "${CouchbaseSchema.JournalEntryType}"
+      |AND a.persistence_id = $$pid
+      |AND m.sequence_nr >= $$from
+      |AND m.sequence_nr <= $$to
+      |ORDER BY m.sequence_nr
+    """.stripMargin
 
   override def postStop(): Unit = {
     closeCouchbaseSession()
@@ -161,11 +153,9 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
       val insert: JsonObject = JsonObject
         .create()
         .put(Fields.Type, CouchbaseSchema.JournalEntryType)
+        .put(Fields.PersistenceId, pid)
         // assumed all msgs have the same writerUuid
         .put(Fields.WriterUuid, write.payload.head.writerUuid.toString)
-        .put(Fields.PersistenceId, pid)
-        .put(Fields.SequenceFrom, write.lowestSequenceNr)
-        .put(Fields.SequenceTo, write.highestSequenceNr)
         .put(Fields.Messages, JsonArray.from(messagesJson.asJava))
 
       JsonDocument.create(s"$pid-${write.lowestSequenceNr}", insert)
@@ -202,34 +192,24 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
           dt + 1 // start at the next sequence nr
         case None => fromSequenceNr
       }
+      .recover {
+        case NonFatal(ex) => throw new RuntimeException(s"Failed looking up deleted messages for [$persistenceId]", ex)
+      }
 
-    val replayFinished: Future[Unit] = deletedTo.flatMap { starting =>
-      log.debug("Starting at sequence_nr {}, query: {}", starting, replayStatement)
+    val replayFinished: Future[Unit] = deletedTo.flatMap { firstNonDeletedSeqNr =>
+      val params = JsonObject
+        .create()
+        .put("pid", persistenceId)
+        .put("from", firstNonDeletedSeqNr)
+        .put("to", toSequenceNr)
+      val query = N1qlQuery.parameterized(replayStatement, params, replayConsistency)
 
-      val limitedStatement =
-        if (max >= 0 && max != Long.MaxValue) {
-          if (max > Int.MaxValue.toLong) {
-            throw new IllegalArgumentException(s"Couchbase cannot limit replay at more than ${Int.MaxValue}, got $max")
-          }
-          replayStatement.limit(max.toInt)
-        } else replayStatement
-
-      val query =
-        N1qlQuery.parameterized(limitedStatement,
-                                JsonArray.from(persistenceId, starting: java.lang.Long, toSequenceNr: java.lang.Long))
-
+      log.debug("Starting at sequence_nr {}, query: {}", firstNonDeletedSeqNr, query)
       val source: Source[JsonObject, NotUsed] = session.streamedQuery(query)
 
       val complete = source
-        .mapAsync(1)(
-          json =>
-            CouchbaseSchema
-              .deserializeEvents(json.getObject(settings.bucket),
-                                 toSequenceNr,
-                                 serialization,
-                                 CouchbaseSchema.extractEvent)
-        )
-        .mapConcat(identity)
+        .take(max)
+        .mapAsync(1)(json => CouchbaseSchema.deserializeEvent(json, serialization))
         .runForeach { pr =>
           recoveryCallback(pr)
         }
@@ -253,10 +233,11 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
 
       val highestSequenceNrQuery = N1qlQuery.parameterized(
         highestSequenceNrStatement,
-        JsonArray.from(persistenceId, fromSequenceNr: java.lang.Long),
-        // Without this the index that gets the latest sequence nr may have not seen the last write of the last version
-        // of this persistenceId. This seems overkill.
-        N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS)
+        JsonObject
+          .create()
+          .put("pid", persistenceId)
+          .put("from", fromSequenceNr: java.lang.Long),
+        replayConsistency
       )
 
       log.debug("Executing: {}", highestSequenceNrQuery)
@@ -266,8 +247,9 @@ class CouchbaseJournal(config: Config, configPath: String) extends AsyncWriteJou
         .map {
           case Some(jsonObj) =>
             log.debug("sequence nr: {}", jsonObj)
-            jsonObj.getLong(Fields.SequenceTo)
-          case None =>
+            if (jsonObj.get("max") != null) jsonObj.getLong("max")
+            else 0L
+          case None => // should never happen
             0L
         }
     }

@@ -62,6 +62,7 @@ class CouchbaseSnapshotStore(cfg: Config, configPath: String) extends SnapshotSt
    */
   def loadAsync(persistenceId: String, criteria: SnapshotSelectionCriteria): Future[Option[SelectedSnapshot]] =
     withCouchbaseSession { session =>
+      log.debug("loadAsync: {}, criteria: {}", persistenceId, criteria)
       val filter = snapshotFilter(criteria)
 
       val query = select("*")

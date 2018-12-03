@@ -7,18 +7,29 @@ package akka.persistence.couchbase
 import akka.actor.{ActorRef, ActorSystem}
 import akka.persistence.query.{Offset, PersistenceQuery}
 import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.Sink
 import akka.stream.testkit.scaladsl.TestSink
 import akka.testkit.{ImplicitSender, TestKit}
+import com.typesafe.config.ConfigFactory
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 
 import scala.concurrent.duration._
 
 class EventsByPersistenceIdSpec
-    extends TestKit(ActorSystem("EventsByPersistenceIdSpec"))
+    extends TestKit(
+      ActorSystem(
+        "EventsByPersistenceIdSpec",
+        ConfigFactory.parseString("""
+            couchbase-journal.read.page-size = 10
+          """).withFallback(ConfigFactory.load())
+      )
+    )
     with WordSpecLike
     with BeforeAndAfterAll
     with Matchers
     with ImplicitSender
+    with ScalaFutures
     with CouchbaseBucketSetup
     with SuppressedLogging {
 
@@ -26,8 +37,6 @@ class EventsByPersistenceIdSpec
     super.afterAll()
     shutdown(system)
   }
-
-  // TODO run this test with smaller pageSize, when that is configurable
 
   val noMsgTimeout = 100.millis
   private val readOurOwnWritesTimeout = 10.seconds
@@ -244,6 +253,7 @@ class EventsByPersistenceIdSpec
         probe.expectComplete()
       }
     }
+
   }
 
   "Couchbase live query EventsByPersistenceId" must {

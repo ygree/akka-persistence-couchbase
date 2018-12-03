@@ -35,8 +35,10 @@ private[akka] final object CouchbaseSchema {
     /*
        Sample doc structure:
        {
-         "sequence_to": 1,
-         "all_tags": [],
+         "persistence_id": "p2",
+         "type": "journal_message",
+         "writer_uuid": "d61a4212-518a-4f75-8f27-2150f56ae60f",
+         // one or more events, more than one in the case of an atomic batched write
          "messages": [
            {
              "sequence_nr": 1,
@@ -54,18 +56,12 @@ private[akka] final object CouchbaseSchema {
              "ordering": "1582-10-16T18:52:02.434002368_ 7093823767347982046",
            }
          ],
-         "writer_uuid": "d61a4212-518a-4f75-8f27-2150f56ae60f",
-         "type": "journal_message",
-         "sequence_from": 1,
-         "persistence_id": "p2"
+
        }
      */
 
     // === per doc ===
     val PersistenceId = "persistence_id"
-    // when a multi message insert is done, this will contain the sequence number range
-    val SequenceFrom = "sequence_from"
-    val SequenceTo = "sequence_to"
     val WriterUuid = "writer_uuid"
     val Messages = "messages"
 
@@ -108,6 +104,9 @@ private[akka] final object CouchbaseSchema {
     val SerializerManifest = "ser_manifest"
     val SerializerId = "ser_id"
     val Timestamp = "timestamp"
+
+    // === per persistence-id-entry metadata ===
+    val MaxSequenceNr = "max_sequence_nr"
   }
 
   val MetadataEntryType = "journal_metadata"
@@ -142,25 +141,21 @@ private[akka] final object CouchbaseSchema {
     json
   }
 
-  def deserializeEvents[T](
-      value: JsonObject,
-      toSequenceNr: Long,
-      serialization: Serialization,
-      extract: (String, String, JsonObject, Serialization) => Future[T]
-  )(implicit ec: ExecutionContext): Future[immutable.Seq[T]] = {
-    val persistenceId = value.getString(Fields.PersistenceId)
-    val from: Long = value.getLong(Fields.SequenceFrom)
-    val sequenceTo: Long = value.getLong(Fields.SequenceTo)
-    val localTo: Long = if (sequenceTo > toSequenceNr) toSequenceNr else sequenceTo
-    val events: JsonArray = value.getArray(Fields.Messages)
-    val writerUuid = value.getString(Fields.WriterUuid)
-    require(sequenceTo - from + 1 == events.size())
-    val nrReply = localTo - from
-    Future.sequence(
-      (0 to nrReply.asInstanceOf[Int]).map { i =>
-        extract(persistenceId, writerUuid, events.getObject(i), serialization)
-      }.toVector
-    )
+  def deserializeEvent[T](
+      json: JsonObject,
+      serialization: Serialization
+  )(implicit system: ActorSystem, ec: ExecutionContext): Future[PersistentRepr] = {
+    val persistenceId = json.getString(Fields.PersistenceId)
+    val sequenceNr: Long = json.getLong(Fields.SequenceNr)
+    val writerUuid = json.getString(Fields.WriterUuid)
+    SerializedMessage
+      .fromJsonObject(serialization, json)
+      .map { payload =>
+        PersistentRepr(payload = payload,
+                       sequenceNr = sequenceNr,
+                       persistenceId = persistenceId,
+                       writerUuid = writerUuid)
+      }(ExecutionContexts.sameThreadExecutionContext)
   }
 
   def deserializeTaggedEvent(
@@ -182,16 +177,6 @@ private[akka] final object CouchbaseSchema {
         TimeBasedUUIDSerialization.fromSortableString(value.getString(Fields.Ordering))
       )
     }
-  }
-
-  def extractEvent(pid: String, writerUuid: String, event: JsonObject, serialization: Serialization)(
-      implicit system: ActorSystem
-  ): Future[PersistentRepr] = {
-    val deserialized: Future[Any] = SerializedMessage.fromJsonObject(serialization, event)
-    val sequenceNr = event.getLong(Fields.SequenceNr)
-    deserialized.map { payload =>
-      PersistentRepr(payload = payload, sequenceNr = sequenceNr, persistenceId = pid, writerUuid = writerUuid)
-    }(ExecutionContexts.sameThreadExecutionContext)
   }
 
 }

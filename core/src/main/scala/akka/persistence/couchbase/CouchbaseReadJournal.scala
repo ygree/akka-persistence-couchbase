@@ -70,14 +70,16 @@ object CouchbaseReadJournal {
     closeCouchbaseSession()
   }
 
-  /* This query flattens the doc.messages into elements in the result and adds a field for the persistence id from
-   * the surrounding document
+  /* Both these queries flattens the doc.messages (which can contain batched writes)
+   * into elements in the result and adds a field for the persistence id from
+   * the surrounding document. Note that the UNNEST name (m) must match the name used
+   * for the array value in the index or the index will not be used for these
    */
-  // FIXME will this really be ordered for the entire result rather than just inside documents?
   private val eventsByTagQuery =
     s"""
       |SELECT a.persistence_id, m.* FROM ${settings.bucket} a UNNEST messages AS m
-      |WHERE ARRAY_CONTAINS(m.tags, $$tag) = true
+      |WHERE a.type = "${CouchbaseSchema.JournalEntryType}"
+      |AND ARRAY_CONTAINS(m.tags, $$tag) = true
       |AND m.ordering > $$fromOffset AND m.ordering <= $$toOffset
       |ORDER BY m.ordering
       |limit $$limit
@@ -85,17 +87,23 @@ object CouchbaseReadJournal {
 
   private val eventsByPersistenceId =
     s"""
-      |select * from ${settings.bucket}
-      |where persistence_id = $$pid
-      |and sequence_from  >= $$from
-      |and sequence_from <= $$to
-      |order by sequence_from
-      |limit $$limit
+      |SELECT a.persistence_id, m.* from ${settings.bucket} a UNNEST messages AS m
+      |WHERE a.type = "${CouchbaseSchema.JournalEntryType}"
+      |AND a.persistence_id = $$pid
+      |AND m.sequence_nr  >= $$from
+      |AND m.sequence_nr <= $$to
+      |ORDER by m.sequence_nr
+      |LIMIT $$limit
     """.stripMargin
 
-  case class EventsByPersistenceIdState(from: Long, to: Long)
+  // IS NOT NULL is needed to hit the index
+  private val pidsQuery =
+    s"""
+       |SELECT DISTINCT(persistence_id) FROM ${settings.bucket}
+       |WHERE type = "${CouchbaseSchema.JournalEntryType}"
+       |AND persistence_id IS NOT NULL
+     """.stripMargin
 
-  // FIXME, filter out messages based on toSerquenceNr when they have been saved into a batch
   override def eventsByPersistenceId(persistenceId: String,
                                      fromSequenceNr: Long,
                                      toSequenceNr: Long): Source[EventEnvelope, NotUsed] =
@@ -115,33 +123,33 @@ object CouchbaseReadJournal {
         JsonObject
           .create()
           .put("pid", persistenceId)
+          .put("from", from)
           .put("to", toSequenceNr)
           .put("limit", settings.pageSize)
-          .put("from", from)
 
       // TODO do the deleted to query first and start from higher of that and fromSequenceNr
       val source =
         Source
           .fromGraph(
-            new N1qlQueryStage[EventsByPersistenceIdState](
+            new N1qlQueryStage[Long](
               live,
               settings.pageSize,
               N1qlQuery.parameterized(eventsByPersistenceId, params(fromSequenceNr)),
               session.underlying,
-              EventsByPersistenceIdState(fromSequenceNr, 0), { state =>
-                if (state.to >= toSequenceNr)
-                  None
-                else
-                  Some(N1qlQuery.parameterized(eventsByPersistenceId, params(state.from)))
+              fromSequenceNr, { from =>
+                if (from <= toSequenceNr) Some(N1qlQuery.parameterized(eventsByPersistenceId, params(from)))
+                else None
               },
-              (_, row) =>
-                EventsByPersistenceIdState(row.value().getObject(settings.bucket).getLong(Fields.SequenceFrom) + 1,
-                                           row.value().getObject(settings.bucket).getLong(Fields.SequenceTo))
+              (_, row) => row.value().getLong(Fields.SequenceNr) + 1
             )
           )
           .mapMaterializedValue(_ => NotUsed)
 
-      eventsByPersistenceIdSource(source)
+      source.mapAsync(1) { row: AsyncN1qlQueryRow =>
+        CouchbaseSchema
+          .deserializeEvent(row.value(), serialization)
+          .map(tpr => EventEnvelope(Offset.sequence(tpr.sequenceNr), tpr.persistenceId, tpr.sequenceNr, tpr.payload))
+      }
     }
 
   /**
@@ -224,23 +232,6 @@ object CouchbaseReadJournal {
       }
     }
 
-  private def eventsByPersistenceIdSource(in: Source[AsyncN1qlQueryRow, NotUsed]): Source[EventEnvelope, NotUsed] =
-    in.mapAsync(1) { row: AsyncN1qlQueryRow =>
-        val value = row.value().getObject(settings.bucket)
-        CouchbaseSchema.deserializeEvents(value, Long.MaxValue, serialization, CouchbaseSchema.extractEvent).map {
-          deserialized =>
-            deserialized.map(
-              tpr =>
-                EventEnvelope(Offset
-                                .sequence(tpr.sequenceNr), // FIXME, should this be +1, check inclusivity of offsets
-                              tpr.persistenceId,
-                              tpr.sequenceNr,
-                              tpr.payload)
-            )
-        }
-      }
-      .mapConcat(identity)
-
   /**
    * select  distinct persistenceId from akka where persistenceId is not null
    */
@@ -248,87 +239,9 @@ object CouchbaseReadJournal {
     // this type works on the current queries we'd need to create a stage
     // to do the live queries
     // this can fail as it relies on async updates to the index.
-    val query = select(distinct(Fields.PersistenceId)).from(settings.bucket).where(x(Fields.PersistenceId).isNotNull)
+    val queryParams = N1qlParams.build().consistency(ScanConsistency.REQUEST_PLUS) // FIXME drop this consistency
     // FIXME respect page size for this query as well?
-    session.streamedQuery(N1qlQuery.simple(query)).map(_.getString(Fields.PersistenceId))
+    session.streamedQuery(N1qlQuery.simple(pidsQuery, queryParams)).map(_.getString(Fields.PersistenceId))
   }
 
-  /*
-     select  distinct persistenceId from akka where persistenceId is not null
-
-     Without the  is not null the pi2 index isn't used
-
-    {
-  "plan": {
-    "#operator": "Sequence",
-    "~children": [
-      {
-        "#operator": "IndexScan3",
-        "covers": [
-          "cover ((`akka`.`persistenceId`))",
-          "cover ((`akka`.`sequence_from`))",
-          "cover ((meta(`akka`).`id`))"
-        ],
-        "distinct": true,
-        "index": "pi2",
-        "index_id": "cef0943ad658063e",
-        "index_projection": {
-          "entry_keys": [
-            0
-          ]
-        },
-        "keyspace": "akka",
-        "namespace": "default",
-        "spans": [
-          {
-            "exact": true,
-            "range": [
-              {
-                "inclusion": 0,
-                "low": "null"
-              }
-            ]
-          }
-        ],
-        "using": "gsi"
-      },
-      {
-        "#operator": "Parallel",
-        "~child": {
-          "#operator": "Sequence",
-          "~children": [
-            {
-              "#operator": "Filter",
-              "condition": "(cover ((`akka`.`persistenceId`)) is not null)"
-            },
-            {
-              "#operator": "InitialProject",
-              "distinct": true,
-              "result_terms": [
-                {
-                  "expr": "cover ((`akka`.`persistenceId`))"
-                }
-              ]
-            },
-            {
-              "#operator": "Distinct"
-            },
-            {
-              "#operator": "FinalProject"
-            }
-          ]
-        }
-      },
-      {
-        "#operator": "Distinct"
-      }
-    ]
-  },
-  "text": "select  distinct persistenceId from akka where persistenceId is not null"
-}
-
-
-   */
-  // override def persistenceIds(): Source[String, NotUsed] =
-  //    ???
 }
