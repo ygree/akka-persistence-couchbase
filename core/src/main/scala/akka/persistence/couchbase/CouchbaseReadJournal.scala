@@ -61,6 +61,7 @@ object CouchbaseReadJournal {
     CouchbaseReadJournalSettings(sharedConfig)
   }
   def bucketName: String = settings.bucket
+  val n1qlQueryStageSettings = N1qlQueryStage.N1qlQuerySettings(settings.liveQueryInterval, settings.pageSize)
 
   protected val asyncSession: Future[CouchbaseSession] = CouchbaseSession(settings.sessionSettings, settings.bucket)
   asyncSession.failed.foreach { ex =>
@@ -92,7 +93,7 @@ object CouchbaseReadJournal {
           .fromGraph(
             new N1qlQueryStage[Long](
               live,
-              settings,
+              n1qlQueryStageSettings,
               eventsByPersistenceIdQuery(persistenceId, fromSequenceNr, toSequenceNr, settings.pageSize),
               session.underlying,
               fromSequenceNr, { from =>
@@ -156,7 +157,7 @@ object CouchbaseReadJournal {
           .fromGraph(
             new N1qlQueryStage[String](
               live,
-              settings,
+              n1qlQueryStageSettings,
               eventsByTagQuery(tag, initialOrderingString, endOffset, settings.pageSize),
               session.underlying,
               initialOrderingString, { ordering =>
@@ -166,7 +167,6 @@ object CouchbaseReadJournal {
               }
             )
           )
-          .mapMaterializedValue(_ => NotUsed)
 
       @volatile var lastUUID = TimeBasedUUIDs.MinUUID
 
@@ -199,7 +199,7 @@ object CouchbaseReadJournal {
       .fromGraph(
         new N1qlQueryStage[NotUsed](
           live = true,
-          settings,
+          n1qlQueryStageSettings,
           persistenceIdsQuery(),
           session.underlying,
           NotUsed,
@@ -207,7 +207,6 @@ object CouchbaseReadJournal {
           (_, _) => NotUsed
         )
       )
-      .mapMaterializedValue(_ => NotUsed)
       .statefulMapConcat[String] { () =>
         var seenIds = Set.empty[String]
 

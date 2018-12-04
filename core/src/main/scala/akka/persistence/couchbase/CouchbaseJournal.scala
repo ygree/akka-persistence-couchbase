@@ -26,6 +26,7 @@ import com.typesafe.config.Config
 
 import scala.collection.JavaConverters._
 import scala.collection.{immutable => im}
+import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
@@ -73,6 +74,10 @@ class CouchbaseJournal(config: Config, configPath: String)
 
     CouchbaseJournalSettings(sharedConfig)
   }
+  private val n1qlQueryStageSettings = N1qlQueryStage.N1qlQuerySettings(
+    Duration.Zero, // We don't do live queries
+    settings.replayPageSize
+  )
   def bucketName: String = settings.bucket
 
   protected val asyncSession: Future[CouchbaseSession] = CouchbaseSession(settings.sessionSettings, settings.bucket)
@@ -183,14 +188,36 @@ class CouchbaseJournal(config: Config, configPath: String)
       }
 
     val replayFinished: Future[Unit] = deletedTo.flatMap { firstNonDeletedSeqNr =>
-      val query = replayQuery(persistenceId, firstNonDeletedSeqNr, toSequenceNr, replayConsistency)
+      // important to not start at 0 since that would skew the paging
+      val startOfFirstPage = math.max(1, firstNonDeletedSeqNr)
+      val endOfFirstPage =
+        math.min(startOfFirstPage + settings.replayPageSize - 1, toSequenceNr)
 
-      log.debug("Starting at sequence_nr {}, query: {}", firstNonDeletedSeqNr, query)
-      val source: Source[JsonObject, NotUsed] = session.streamedQuery(query)
+      val firstQuery = replayQuery(persistenceId, startOfFirstPage, endOfFirstPage, replayConsistency)
+
+      log.debug("Starting at sequence_nr {}, query: {}", startOfFirstPage, firstQuery)
+      val source: Source[AsyncN1qlQueryRow, NotUsed] = Source.fromGraph(
+        new N1qlQueryStage[Long](
+          false,
+          n1qlQueryStageSettings,
+          firstQuery,
+          session.underlying,
+          endOfFirstPage, { endOfPreviousPage =>
+            val startOfNextPage = endOfPreviousPage + 1
+            if (startOfNextPage > toSequenceNr) {
+              None
+            } else {
+              val endOfNextPage = math.min(startOfNextPage + settings.replayPageSize, toSequenceNr)
+              Some(replayQuery(persistenceId, startOfNextPage, endOfNextPage, replayConsistency))
+            }
+          },
+          (endOfPage, row) => row.value().getLong(Fields.SequenceNr)
+        )
+      )
 
       val complete = source
         .take(max)
-        .mapAsync(1)(json => CouchbaseSchema.deserializeEvent(json, serialization))
+        .mapAsync(1)(row => CouchbaseSchema.deserializeEvent(row.value(), serialization))
         .runForeach { pr =>
           recoveryCallback(pr)
         }

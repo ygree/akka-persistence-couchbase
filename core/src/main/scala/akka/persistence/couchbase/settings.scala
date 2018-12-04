@@ -15,6 +15,7 @@ import scala.concurrent.duration._
 final case class CouchbaseJournalSettings private (sessionSettings: CouchbaseSessionSettings,
                                                    bucket: String,
                                                    writeSettings: CouchbaseWriteSettings,
+                                                   replayPageSize: Int,
                                                    readTimeout: FiniteDuration)
 
 /**
@@ -34,8 +35,9 @@ object CouchbaseJournalSettings {
       timeout = config.getDuration("write.write-timeout").toMillis.millis
     )
     val readTimeout = config.getDuration("write.read-timeout").toMillis.millis
+    val replayPageSize = config.getInt("write.replay-page-size")
 
-    CouchbaseJournalSettings(sessionSettings, bucket, writeSettings, readTimeout)
+    CouchbaseJournalSettings(sessionSettings, bucket, writeSettings, replayPageSize, readTimeout)
   }
 
   private def parseReplicateTo(value: String): ReplicateTo = value match {
