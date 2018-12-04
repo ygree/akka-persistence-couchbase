@@ -4,6 +4,8 @@
 
 package akka.stream.alpakka.couchbase
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
@@ -141,6 +143,23 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       val v2 = session.counter("c1", 1, 0).toScala.futureValue
       v1 should ===(0L) // starts at 0
       v2 should ===(1L)
+    }
+  }
+
+  "The session registry" must {
+
+    "return the same session instance for the same settings" in {
+      val settings = CouchbaseSessionSettings("admin", "admin1")
+      val session1 = CouchbaseSessionRegistry(system).sessionFor(settings, bucketName).futureValue
+      val session2 = CouchbaseSessionRegistry(system).sessionFor(settings, bucketName).futureValue
+      val session3 = CouchbaseSessionRegistry(system)
+        .getSessionFor(settings, bucketName)
+        .toCompletableFuture
+        .get(3, TimeUnit.SECONDS)
+
+      session1 should be theSameInstanceAs (session2)
+      session3.asScala should be theSameInstanceAs (session1)
+      session1.close()
     }
   }
 

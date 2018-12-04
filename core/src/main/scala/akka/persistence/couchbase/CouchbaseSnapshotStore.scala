@@ -11,6 +11,7 @@ import akka.persistence.couchbase.internal.{AsyncCouchbaseSession, CouchbaseSche
 import akka.persistence.snapshot.SnapshotStore
 import akka.persistence.{SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria}
 import akka.serialization.SerializationExtension
+import akka.stream.alpakka.couchbase.CouchbaseSessionRegistry
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
@@ -41,14 +42,12 @@ class CouchbaseSnapshotStore(cfg: Config, configPath: String) extends SnapshotSt
   private implicit val ec: ExecutionContext = context.dispatcher
   private val serialization = SerializationExtension(context.system)
 
-  protected val asyncSession: Future[CouchbaseSession] = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  protected val asyncSession: Future[CouchbaseSession] =
+    CouchbaseSessionRegistry(system).sessionFor(settings.sessionSettings, settings.bucket)
   asyncSession.failed.foreach { ex =>
     log.error(ex, "Failed to connect to couchbase")
     context.stop(self)
   }
-
-  override def postStop(): Unit =
-    closeCouchbaseSession()
 
   /**
    * select * from akka where type = "snapshot"

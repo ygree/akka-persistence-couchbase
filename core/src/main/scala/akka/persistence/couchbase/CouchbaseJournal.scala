@@ -16,6 +16,7 @@ import akka.persistence.journal.{AsyncWriteJournal, Tagged}
 import akka.persistence.{AtomicWrite, PersistentRepr}
 import akka.serialization.{Serialization, SerializationExtension}
 import akka.stream.ActorMaterializer
+import akka.stream.alpakka.couchbase.CouchbaseSessionRegistry
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.document.JsonDocument
@@ -80,15 +81,11 @@ class CouchbaseJournal(config: Config, configPath: String)
   )
   def bucketName: String = settings.bucket
 
-  protected val asyncSession: Future[CouchbaseSession] = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  protected val asyncSession: Future[CouchbaseSession] =
+    CouchbaseSessionRegistry(system).sessionFor(settings.sessionSettings, settings.bucket)
   asyncSession.failed.foreach { ex =>
     log.error(ex, "Failed to connect to couchbase")
     context.stop(self)
-  }
-
-  override def postStop(): Unit = {
-    closeCouchbaseSession()
-    materializer.shutdown()
   }
 
   override def asyncWriteMessages(messages: im.Seq[AtomicWrite]): Future[im.Seq[Try[Unit]]] = {

@@ -15,6 +15,7 @@ import akka.persistence.couchbase.internal._
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
 import akka.serialization.{Serialization, SerializationExtension}
+import akka.stream.alpakka.couchbase.CouchbaseSessionRegistry
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
 import com.couchbase.client.java.document.json.JsonObject
@@ -63,13 +64,10 @@ object CouchbaseReadJournal {
   def bucketName: String = settings.bucket
   val n1qlQueryStageSettings = N1qlQueryStage.N1qlQuerySettings(settings.liveQueryInterval, settings.pageSize)
 
-  protected val asyncSession: Future[CouchbaseSession] = CouchbaseSession(settings.sessionSettings, settings.bucket)
+  protected val asyncSession: Future[CouchbaseSession] =
+    CouchbaseSessionRegistry(system).sessionFor(settings.sessionSettings, settings.bucket)
   asyncSession.failed.foreach { ex =>
     log.error(ex, "Failed to connect to couchbase")
-  }
-
-  system.registerOnTermination {
-    closeCouchbaseSession()
   }
 
   override def eventsByPersistenceId(persistenceId: String,

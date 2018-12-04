@@ -5,7 +5,7 @@
 package com.lightbend.lagom.scaladsl.persistence.couchbase
 
 import akka.event.Logging
-import akka.stream.alpakka.couchbase.{scaladsl, CouchbaseSessionSettings}
+import akka.stream.alpakka.couchbase.{scaladsl, CouchbaseSessionRegistry, CouchbaseSessionSettings}
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import com.lightbend.lagom.internal.persistence.couchbase.{CouchbaseConfigValidator, CouchbaseOffsetStore}
 import com.lightbend.lagom.internal.scaladsl.persistence.couchbase.{
@@ -68,7 +68,7 @@ trait ReadSideCouchbasePersistenceComponents extends ReadSidePersistenceComponen
   // if not we should pass Future[CouchbaseSession] around and let the use sites mix in AsyncCouchbaseSession - but if we use
   // that from Lagom it needs to be made public API
   lazy val couchbase: CouchbaseSession =
-    Await.result(scaladsl.CouchbaseSession(sessionSettings, bucket), 30.seconds)
+    Await.result(CouchbaseSessionRegistry(actorSystem).sessionFor(sessionSettings, bucket), 30.seconds)
 
   private[lagom] lazy val couchbaseOffsetStore: CouchbaseOffsetStore =
     new ScaladslCouchbaseOffsetStore(actorSystem, couchbase, readSideConfig)
