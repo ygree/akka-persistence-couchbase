@@ -28,6 +28,7 @@ import com.typesafe.config.Config
 
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
+import scala.concurrent.duration._
 
 object CouchbaseReadJournal {
   final val Identifier = "couchbase-journal.read"
@@ -85,16 +86,24 @@ object CouchbaseReadJournal {
                                             fromSequenceNr: Long,
                                             toSequenceNr: Long): Source[EventEnvelope, NotUsed] =
     sourceWithCouchbaseSession { session =>
-      // TODO do the deleted to query first and start from higher of that and fromSequenceNr
-      val source =
+      val deletedTo: Future[Long] =
+        firstNonDeletedEventFor(persistenceId, session, 10.seconds) // FIXME timeout from config
+          .map(_.getOrElse(fromSequenceNr))
+
+      val source = deletedTo.map { startFrom =>
+        if (log.isDebugEnabled)
+          log.debug(
+            "events by persistenceId: live {}, persistenceId: {}, from: {}, actualFrom: {}, to: {}",
+            Array(live, persistenceId, fromSequenceNr, startFrom, toSequenceNr)
+          )
         Source
           .fromGraph(
             new N1qlQueryStage[Long](
               live,
               n1qlQueryStageSettings,
-              eventsByPersistenceIdQuery(persistenceId, fromSequenceNr, toSequenceNr, settings.pageSize),
+              eventsByPersistenceIdQuery(persistenceId, startFrom, toSequenceNr, settings.pageSize),
               session.underlying,
-              fromSequenceNr, { from =>
+              startFrom, { from =>
                 if (from <= toSequenceNr)
                   Some(eventsByPersistenceIdQuery(persistenceId, from, toSequenceNr, settings.pageSize))
                 else None
@@ -103,12 +112,16 @@ object CouchbaseReadJournal {
             )
           )
           .mapMaterializedValue(_ => NotUsed)
-
-      source.mapAsync(1) { row: AsyncN1qlQueryRow =>
-        CouchbaseSchema
-          .deserializeEvent(row.value(), serialization)
-          .map(tpr => EventEnvelope(Offset.sequence(tpr.sequenceNr), tpr.persistenceId, tpr.sequenceNr, tpr.payload))
       }
+
+      Source
+        .fromFutureSource(source)
+        .mapAsync(1) { row: AsyncN1qlQueryRow =>
+          CouchbaseSchema
+            .deserializeEvent(row.value(), serialization)
+            .map(tpr => EventEnvelope(Offset.sequence(tpr.sequenceNr), tpr.persistenceId, tpr.sequenceNr, tpr.payload))
+        }
+        .mapMaterializedValue(_ => NotUsed)
     }
 
   /**

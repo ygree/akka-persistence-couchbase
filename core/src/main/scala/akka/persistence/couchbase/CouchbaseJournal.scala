@@ -171,18 +171,8 @@ class CouchbaseJournal(config: Config, configPath: String)
   ): Future[Unit] = withCouchbaseSession { session =>
     log.debug("asyncReplayMessages {} {} {} {}", persistenceId, fromSequenceNr, toSequenceNr, max)
 
-    val deletedTo: Future[Long] = session
-      .get(CouchbaseSchema.metadataIdFor(persistenceId), settings.readTimeout)
-      .map {
-        case Some(jsonDoc) =>
-          val dt = jsonDoc.content().getLong(Fields.DeletedTo).toLong
-          log.debug("Previously deleted to: {}", dt)
-          dt + 1 // start at the next sequence nr
-        case None => fromSequenceNr
-      }
-      .recover {
-        case NonFatal(ex) => throw new RuntimeException(s"Failed looking up deleted messages for [$persistenceId]", ex)
-      }
+    val deletedTo: Future[Long] = firstNonDeletedEventFor(persistenceId, session, settings.readTimeout)
+      .map(_.getOrElse(fromSequenceNr))
 
     val replayFinished: Future[Unit] = deletedTo.flatMap { firstNonDeletedSeqNr =>
       // important to not start at 0 since that would skew the paging

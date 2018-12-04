@@ -13,14 +13,17 @@ import akka.persistence.PersistentRepr
 import akka.persistence.couchbase.CouchbaseJournal.TaggedPersistentRepr
 import akka.persistence.couchbase._
 import akka.serialization.{AsyncSerializer, Serialization, Serializers}
+import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.util.OptionVal
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlParams, N1qlQuery, ParameterizedN1qlQuery, SimpleN1qlQuery}
 
 import scala.collection.JavaConverters._
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
+import scala.util.control.NonFatal
 
 /*
  * INTERNAL API
@@ -215,6 +218,22 @@ private[akka] final object CouchbaseSchema {
 
     protected def persistenceIdsQuery(): N1qlQuery =
       N1qlQuery.simple(persistenceIds)
+
+    protected def firstNonDeletedEventFor(
+        persistenceId: String,
+        session: CouchbaseSession,
+        readTimeout: FiniteDuration
+    )(implicit ec: ExecutionContext): Future[Option[Long]] =
+      session
+        .get(metadataIdFor(persistenceId), readTimeout)
+        .map(_.map { jsonDoc =>
+          val dt = jsonDoc.content().getLong(Fields.DeletedTo).toLong
+          dt + 1 // start at the next sequence nr
+        })
+        .recover {
+          case NonFatal(ex) =>
+            throw new RuntimeException(s"Failed looking up deleted messages for [$persistenceId]", ex)
+        }
 
   }
 
