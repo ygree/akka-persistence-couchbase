@@ -6,7 +6,7 @@ package com.lightbend.lagom.internal.scaladsl.persistence.couchbase
 
 import akka.actor.ActorSystem
 import akka.event.Logging
-import akka.persistence.couchbase.CouchbaseReadJournal
+import akka.persistence.couchbase.scaladsl.CouchbaseReadJournal
 import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseConfigValidator
 import com.lightbend.lagom.internal.scaladsl.persistence.AbstractPersistentEntityRegistry
 

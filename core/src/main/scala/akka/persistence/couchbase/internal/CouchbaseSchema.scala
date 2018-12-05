@@ -117,7 +117,7 @@ private[akka] final object CouchbaseSchema {
   val SnapshotEntryType = "snapshot"
 
   trait Queries {
-    def bucketName: String
+    protected def bucketName: String
 
     // TODO how horrific is this query, it does hit the index but it still needs to look at all results?
     // seems to be at worst as fast as the previous ORDER BY + LIMIT 1 query at least

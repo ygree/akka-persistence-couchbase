@@ -2,7 +2,7 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package akka.persistence.couchbase
+package akka.persistence.couchbase.scaladsl
 
 import java.util.UUID
 
@@ -10,20 +10,24 @@ import akka.NotUsed
 import akka.actor.ExtendedActorSystem
 import akka.annotation.InternalApi
 import akka.event.Logging
-import akka.persistence.couchbase.internal.CouchbaseSchema.{Fields, Queries}
-import akka.persistence.couchbase.internal._
+import akka.persistence.couchbase.internal.{
+  AsyncCouchbaseSession,
+  CouchbaseSchema,
+  N1qlQueryStage,
+  TimeBasedUUIDComparator,
+  TimeBasedUUIDSerialization,
+  TimeBasedUUIDs,
+  UUIDTimestamp
+}
+import akka.persistence.couchbase.internal.CouchbaseSchema.Fields
+import akka.persistence.couchbase.CouchbaseReadJournalSettings
 import akka.persistence.query._
 import akka.persistence.query.scaladsl._
 import akka.serialization.{Serialization, SerializationExtension}
 import akka.stream.alpakka.couchbase.CouchbaseSessionRegistry
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.scaladsl.Source
-import com.couchbase.client.java.document.json.JsonObject
-import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query._
-import com.couchbase.client.java.query.consistency.ScanConsistency
-import com.couchbase.client.java.query.dsl.Expression._
-import com.couchbase.client.java.query.dsl.functions.AggregateFunctions._
 import com.typesafe.config.Config
 
 import scala.concurrent.Future
@@ -31,13 +35,34 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.duration._
 
 object CouchbaseReadJournal {
+
+  /**
+   * The default identifier for [[CouchbaseReadJournal]] to be used with
+   * `akka.persistence.query.PersistenceQuery#getReadJournalFor`.
+   *
+   * The value is `"couchbase-journal.read"` and corresponds
+   * to the absolute path to the read journal configuration entry.
+   */
   final val Identifier = "couchbase-journal.read"
 }
 
 /**
- * INTERNAL API (all access should be through the persistence query APIs)
+ * Scala API `akka.persistence.query.scaladsl.ReadJournal` implementation for Couchbase.
+ *
+ * It is retrieved with:
+ * {{{
+ * val queries = PersistenceQuery(system).readJournalFor[CouchbaseReadJournal](CouchbaseReadJournal.Identifier)
+ * }}}
+ *
+ * Corresponding Java API is in [[akka.persistence.couchbase.javadsl.CouchbaseReadJournal]].
+ *
+ *
+ *
+ * Configuration settings can be defined in the configuration section with the
+ * absolute path corresponding to the identifier, which is `"couchbase-journal.read"`
+ * for the default [[CouchbaseReadJournal#Identifier]]. See `reference.conf`.
  */
-@InternalApi class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath: String)
+class CouchbaseReadJournal(eas: ExtendedActorSystem, config: Config, configPath: String)
     extends ReadJournal
     with AsyncCouchbaseSession
     with EventsByPersistenceIdQuery
@@ -51,7 +76,6 @@ object CouchbaseReadJournal {
   private implicit val system = eas
   private val log = Logging(system, configPath)
 
-  protected implicit val executionContext = system.dispatcher
   private val serialization: Serialization = SerializationExtension(system)
 
   /** INTERNAL API */
@@ -62,20 +86,55 @@ object CouchbaseReadJournal {
 
     CouchbaseReadJournalSettings(sharedConfig)
   }
-  def bucketName: String = settings.bucket
-  val n1qlQueryStageSettings = N1qlQueryStage.N1qlQuerySettings(settings.liveQueryInterval, settings.pageSize)
+  protected def bucketName: String = settings.bucket
+  private val n1qlQueryStageSettings = N1qlQueryStage.N1qlQuerySettings(settings.liveQueryInterval, settings.pageSize)
+  protected implicit val executionContext = system.dispatchers.lookup(settings.dispatcher)
 
   protected val asyncSession: Future[CouchbaseSession] =
     CouchbaseSessionRegistry(system).sessionFor(settings.sessionSettings, settings.bucket)
+
+  /**
+   * Data Access Object for arbitrary queries or updates.
+   */
+  val session: Future[CouchbaseSession] = asyncSession
+
   asyncSession.failed.foreach { ex =>
     log.error(ex, "Failed to connect to couchbase")
   }
 
+  /**
+   * `eventsByPersistenceId` is used to retrieve a stream of events for a particular persistenceId.
+   *
+   * In addition to the `offset` the `EventEnvelope` also provides `persistenceId` and `sequenceNr`
+   * for each event. The `sequenceNr` is the sequence number for the persistent actor with the
+   * `persistenceId` that persisted the event. The `persistenceId` + `sequenceNr` is an unique
+   * identifier for the event.
+   *
+   * `sequenceNr` and `offset` are always the same for an event and they define ordering for events
+   * emitted by this query. Causality is guaranteed (`sequenceNr`s of events for a particular
+   * `persistenceId` are always ordered in a sequence monotonically increasing by one). Multiple
+   * executions of the same bounded stream are guaranteed to emit exactly the same stream of events.
+   *
+   * `fromSequenceNr` and `toSequenceNr` can be specified to limit the set of returned events.
+   * The `fromSequenceNr` and `toSequenceNr` are inclusive.
+   *
+   * Deleted events are also deleted from the event stream.
+   *
+   * The stream is not completed when it reaches the end of the currently stored events,
+   * but it continues to push new events when new events are persisted.
+   * Corresponding query that is completed when it reaches the end of the currently
+   * stored events is provided by `currentEventsByPersistenceId`.
+   */
   override def eventsByPersistenceId(persistenceId: String,
                                      fromSequenceNr: Long,
                                      toSequenceNr: Long): Source[EventEnvelope, NotUsed] =
     internalEventsByPersistenceId(live = true, persistenceId, fromSequenceNr, toSequenceNr)
 
+  /**
+   * Same type of query as `eventsByPersistenceId` but the event stream
+   * is completed immediately when it reaches the end of the "result set". Events that are
+   * stored after the query is completed are not included in the event stream.
+   */
   override def currentEventsByPersistenceId(persistenceId: String,
                                             fromSequenceNr: Long,
                                             toSequenceNr: Long): Source[EventEnvelope, NotUsed] =
@@ -125,12 +184,62 @@ object CouchbaseReadJournal {
     }
 
   /**
-   * @param offset Either no offset or a timebased UUID offset, result will be exclusive the given UUID
-   * @return A stream of tagged events sorted by their UUID
+   * `eventsByTag` is used for retrieving events that were marked with
+   * a given tag, e.g. all events of an Aggregate Root type.
+   *
+   * To tag events you create an `akka.persistence.journal.EventAdapter` that wraps the events
+   * in a `akka.persistence.journal.Tagged` with the given `tags`.
+   *
+   * You can use `NoOffset` to retrieve all events with a given tag or
+   * retrieve a subset of all events by specifying a `TimeBasedUUID` `offset`.
+   *
+   * The offset of each event is provided in the streamed envelopes returned,
+   * which makes it possible to resume the stream at a later point from a given offset.
+   *
+   * For querying events that happened after a long unix timestamp you can use
+   * [[akka.persistence.couchbase.UUIDs.timeBasedUUIDFrom]] to create the offset to use with this method.
+   *
+   * In addition to the `offset` the envelope also provides `persistenceId` and `sequenceNr`
+   * for each event. The `sequenceNr` is the sequence number for the persistent actor with the
+   * `persistenceId` that persisted the event. The `persistenceId` + `sequenceNr` is an unique
+   * identifier for the event.
+   *
+   * The returned event stream is ordered by the offset (timestamp), which corresponds
+   * to the same order as the write journal stored the events, with inaccuracy due to clock skew
+   * between different nodes. The same stream elements (in same order) are returned for multiple
+   * executions of the query on a best effort basis. The query is using a Couchbase Indexes
+   * that is eventually consistent, so different queries may see different
+   * events for the latest events, but eventually the result will be ordered by the timestamp based
+   * Couchbase `ordering` field. To compensate for the the eventual consistency the query is
+   * delayed to not read the latest events, see `couchbase-journal.read.events-by-tag.eventual-consistency-delay`
+   * in reference.conf. However, this is only best effort and in case of network partitions
+   * or other things that may delay the updates of the Couchbase indexes the events may be
+   * delivered in different order (not strictly by their timestamp).
+   *
+   * Deleted events are NOT deleted from the tagged event stream.
+   *
+   * The stream is not completed when it reaches the end of the currently stored events,
+   * but it continues to push new events when new events are persisted.
+   * Corresponding query that is completed when it reaches the end of the currently
+   * stored events is provided by `currentEventsByTag`.
+   *
+   * The stream is completed with failure if there is a failure in executing the query in the
+   * backend journal.
    */
   override def eventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] =
     internalEventsByTag(live = true, tag, offset)
 
+  /**
+   * Same type of query as `eventsByTag` but the event stream
+   * is completed immediately when it reaches the end of the "result set"
+   * unless it has received as many events as it has requested.
+   * In that case it will request one more time before completing the stream.
+   *
+   * Use `NoOffset` when you want all events from the beginning of time.
+   * To acquire an offset from a long unix timestamp to use with this query, you can use
+   * [[akka.persistence.couchbase.UUIDs.timeBasedUUIDFrom]].
+   *
+   */
   override def currentEventsByTag(tag: String, offset: Offset): Source[EventEnvelope, NotUsed] =
     internalEventsByTag(live = false, tag, offset)
 
@@ -196,7 +305,9 @@ object CouchbaseReadJournal {
     }
 
   /**
-   * select  distinct persistenceId from akka where persistenceId is not null
+   * Same type of query as `persistenceIds` but the event stream
+   * is completed immediately when it reaches the end of the "result set". Events that are
+   * stored after the query is triggered are not included in the event stream.
    */
   override def currentPersistenceIds(): Source[String, NotUsed] = sourceWithCouchbaseSession { session =>
     log.debug("currentPersistenceIds query")
@@ -204,6 +315,26 @@ object CouchbaseReadJournal {
     session.streamedQuery(persistenceIdsQuery()).map(_.getString(Fields.PersistenceId))
   }
 
+  /**
+   * `persistenceIds` is used to retrieve a stream of `persistenceId`s.
+   *
+   * The stream emits `persistenceId` strings.
+   *
+   * The stream guarantees that a `persistenceId` is only emitted once and there are no duplicates.
+   * Order is not defined. Multiple executions of the same stream (even bounded) may emit different
+   * sequence of `persistenceId`s.
+   *
+   * The stream is not completed when it reaches the end of the currently known `persistenceId`s,
+   * but it continues to push new `persistenceId`s when new events are persisted.
+   * Corresponding query that is completed when it reaches the end of the currently
+   * known `persistenceId`s is provided by `currentPersistenceIds`.
+   *
+   * Note the query is inefficient, especially for large numbers of `persistenceId`s, because
+   * of limitation of current internal implementation providing no information supporting
+   * ordering/offset queries. The query uses Couchbase's `select distinct` capabilities.
+   * More importantly the live query has to repeatedly execute the query each `refresh-interval`,
+   * because order is not defined and new `persistenceId`s may appear anywhere in the query results.
+   */
   override def persistenceIds(): Source[String, NotUsed] = sourceWithCouchbaseSession { session =>
     log.debug("persistenceIds query")
     Source

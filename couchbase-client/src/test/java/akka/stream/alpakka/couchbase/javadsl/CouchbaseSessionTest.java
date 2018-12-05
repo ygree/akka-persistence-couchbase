@@ -1,3 +1,7 @@
+/*
+ * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
+ */
+
 package akka.stream.alpakka.couchbase.javadsl;
 
 import com.couchbase.client.java.Bucket;

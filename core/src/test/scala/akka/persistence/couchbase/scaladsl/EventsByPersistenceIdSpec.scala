@@ -2,18 +2,19 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package akka.persistence.couchbase
+package akka.persistence.couchbase.scaladsl
 
 import akka.actor.{ActorRef, ActorSystem}
-import akka.persistence.DeleteMessagesSuccess
 import akka.persistence.query.{Offset, PersistenceQuery}
+import akka.persistence.DeleteMessagesSuccess
+import akka.persistence.couchbase.{CouchbaseBucketSetup, SuppressedLogging, TestActor}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import akka.stream.testkit.scaladsl.TestSink
-import akka.testkit.{ImplicitSender, TestKit, TestProbe}
+import akka.testkit.{TestKit, TestProbe}
 import com.typesafe.config.ConfigFactory
-import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
+import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.duration._
 

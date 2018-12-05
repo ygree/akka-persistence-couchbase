@@ -6,7 +6,6 @@ package akka.persistence.couchbase
 
 import akka.annotation.InternalApi
 import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
-import com.couchbase.client.java.query.consistency.ScanConsistency
 import com.couchbase.client.java.{PersistTo, ReplicateTo}
 import com.typesafe.config.Config
 
@@ -67,7 +66,8 @@ private[couchbase] final case class CouchbaseReadJournalSettings(sessionSettings
                                                                  bucket: String,
                                                                  pageSize: Int,
                                                                  liveQueryInterval: FiniteDuration,
-                                                                 eventByTagSettings: EventByTagSettings)
+                                                                 eventByTagSettings: EventByTagSettings,
+                                                                 dispatcher: String)
 final case class EventByTagSettings(eventualConsistencyDelay: FiniteDuration)
 
 /**
@@ -89,7 +89,9 @@ private[couchbase] object CouchbaseReadJournalSettings {
     )
     val liveQueryInterval = config.getDuration("read.live-query-interval").toMillis.millis
 
-    CouchbaseReadJournalSettings(sessionSettings, bucket, pageSize, liveQueryInterval, eventByTagSettings)
+    val dispatcher = config.getString("read.plugin-dispatcher")
+
+    CouchbaseReadJournalSettings(sessionSettings, bucket, pageSize, liveQueryInterval, eventByTagSettings, dispatcher)
   }
 }
 

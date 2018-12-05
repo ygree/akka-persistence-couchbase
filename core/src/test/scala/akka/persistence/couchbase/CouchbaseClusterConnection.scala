@@ -16,9 +16,9 @@ import scala.concurrent.duration._
 
 object CouchbaseClusterConnection {
 
-  def connect(username: String = "admin",
-              password: String = "admin1",
-              bucketName: String = "akka"): CouchbaseClusterConnection = {
+  def connect(): CouchbaseClusterConnection = connect("admin", "admin1", "akka")
+
+  def connect(username: String, password: String, bucketName: String): CouchbaseClusterConnection = {
 
     val cluster = CouchbaseCluster.create()
     cluster.authenticate(username, password) // needs to be admin

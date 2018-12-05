@@ -14,8 +14,9 @@ import akka.persistence.journal.Tagged
 import scala.collection.immutable
 
 object TestActor {
-  def props(persistenceId: String, journalId: String = "couchbase-journal.write"): Props =
-    Props(new TestActor(persistenceId, journalId))
+  def props(persistenceId: String): Props = props(persistenceId, "couchbase-journal.write")
+
+  def props(persistenceId: String, journalId: String): Props = Props(new TestActor(persistenceId, journalId))
 
   final case class PersistAll(events: immutable.Seq[String])
   final case class DeleteTo(seqNr: Long)

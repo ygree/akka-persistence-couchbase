@@ -57,6 +57,7 @@ object Dependencies {
     akkaPersistenceQuery,
     akkaPersistenceTck,
     akkaStreamTestkit,
+    akkaTestkit,
     logback,
     scalaTest,
     slf4jApi

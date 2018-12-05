@@ -2,18 +2,19 @@
  * Copyright (C) 2018 Lightbend Inc. <http://www.lightbend.com>
  */
 
-package akka.persistence.couchbase
+package akka.persistence.couchbase.scaladsl
 
 import akka.actor.ActorSystem
+import akka.persistence.couchbase.{CouchbaseBucketSetup, TestActor, UUIDs}
+import akka.persistence.query.{EventEnvelope, NoOffset, PersistenceQuery, TimeBasedUUID}
 import akka.persistence.query.scaladsl.EventsByTagQuery
-import akka.persistence.query.{EventEnvelope, NoOffset, PersistenceQuery}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import akka.stream.testkit.TestSubscriber
 import akka.stream.testkit.scaladsl.TestSink
 import akka.testkit.{TestKit, TestProbe}
-import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike}
+import org.scalatest.concurrent.ScalaFutures
 
 import scala.collection.immutable
 import scala.concurrent.duration._
@@ -158,6 +159,53 @@ class CouchbaseReadJournalSpec
       probe2.request(10)
       probe2.expectNextPF { case e @ EventEnvelope(_, "b", 2L, "a green leaf") => e }
       probe2.expectNoMessage(waitTime)
+      probe2.cancel()
+    }
+
+    "find events from timestamp offset " in {
+      val greenSrc1 = queries.eventsByTag(tag = "green", offset = NoOffset)
+      val probe1 = greenSrc1.runWith(TestSink.probe[Any])
+      probe1.request(2)
+      val appleOffs = probe1
+        .expectNextPF {
+          case e @ EventEnvelope(_, "a", 2L, "a green apple") => e
+        }
+        .offset
+        .asInstanceOf[TimeBasedUUID]
+      val bananaOffs = probe1
+        .expectNextPF {
+          case e @ EventEnvelope(_, "a", 4L, "a green banana") => e
+        }
+        .offset
+        .asInstanceOf[TimeBasedUUID]
+      probe1.cancel()
+
+      val appleTimestamp = UUIDs.timestampFrom(appleOffs)
+      val bananaTimestamp = UUIDs.timestampFrom(bananaOffs)
+      appleTimestamp should be <= (bananaTimestamp)
+
+      val greenSrc2 = queries.currentEventsByTag(tag = "green", UUIDs.timeBasedUUIDFrom(bananaTimestamp))
+      val probe2 = greenSrc2.runWith(TestSink.probe[Any])
+      probe2.request(10)
+      if (appleTimestamp == bananaTimestamp)
+        probe2.expectNextPF { case e @ EventEnvelope(_, "a", 2L, "a green apple") => e }
+      probe2.expectNextPF { case e @ EventEnvelope(_, "a", 4L, "a green banana") => e }
+      probe2.expectNextPF { case e @ EventEnvelope(_, "b", 2L, "a green leaf") => e }
+      probe2.cancel()
+    }
+
+    "find events from UUID offset" in {
+      val greenSrc1 = queries.currentEventsByTag(tag = "green", offset = NoOffset)
+      val probe1 = greenSrc1.runWith(TestSink.probe[Any])
+      probe1.request(2)
+      probe1.expectNextPF { case e @ EventEnvelope(_, "a", 2L, "a green apple") => e }
+      val offs = probe1.expectNextPF { case e @ EventEnvelope(_, "a", 4L, "a green banana") => e }.offset
+      probe1.cancel()
+
+      val greenSrc2 = queries.currentEventsByTag(tag = "green", offs)
+      val probe2 = greenSrc2.runWith(TestSink.probe[Any])
+      probe2.request(10)
+      probe2.expectNextPF { case e @ EventEnvelope(_, "b", 2L, "a green leaf") => e }
       probe2.cancel()
     }
 
