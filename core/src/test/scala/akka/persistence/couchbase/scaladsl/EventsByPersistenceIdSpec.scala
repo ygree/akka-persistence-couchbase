@@ -4,80 +4,13 @@
 
 package akka.persistence.couchbase.scaladsl
 
-import akka.actor.{ActorRef, ActorSystem}
-import akka.persistence.query.{Offset, PersistenceQuery}
 import akka.persistence.DeleteMessagesSuccess
-import akka.persistence.couchbase.{CouchbaseBucketSetup, SuppressedLogging, TestActor}
-import akka.stream.ActorMaterializer
+import akka.persistence.couchbase.TestActor
+import akka.persistence.query.Offset
 import akka.stream.scaladsl.Sink
 import akka.stream.testkit.scaladsl.TestSink
-import akka.testkit.{TestKit, TestProbe}
-import com.typesafe.config.ConfigFactory
-import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
-import org.scalatest.concurrent.ScalaFutures
 
-import scala.concurrent.duration._
-
-class EventsByPersistenceIdSpec
-    extends TestKit(
-      ActorSystem(
-        "EventsByPersistenceIdSpec",
-        ConfigFactory.parseString("""
-            couchbase-journal.read.page-size = 10
-          """).withFallback(ConfigFactory.load())
-      )
-    )
-    with WordSpecLike
-    with BeforeAndAfterAll
-    with Matchers
-    with ScalaFutures
-    with CouchbaseBucketSetup
-    with SuppressedLogging {
-
-  protected override def afterAll(): Unit = {
-    super.afterAll()
-    shutdown(system)
-  }
-
-  val noMsgTimeout = 100.millis
-  private val readOurOwnWritesTimeout = 10.seconds
-  override implicit val patienceConfig = PatienceConfig(readOurOwnWritesTimeout)
-
-  implicit val materializer = ActorMaterializer()
-  lazy val queries: CouchbaseReadJournal =
-    PersistenceQuery(system).readJournalFor[CouchbaseReadJournal](CouchbaseReadJournal.Identifier)
-
-  var idCounter = 0
-  def nextPersistenceId(): String = {
-    idCounter += 1
-    val id = Integer.toString(idCounter, 24)
-    id.toString
-  }
-
-  // provides a unique persistence-id per test case and some initial persisted events
-  private trait Setup {
-    lazy val probe = TestProbe()
-    implicit def sender: ActorRef = probe.ref
-    // note must be a def or lazy val or else it doesn't work (init order)
-    def initialPersistedEvents: Int = 0
-    def startPersistentActor(initialEvents: Int): (String, ActorRef) = {
-      val pid = nextPersistenceId()
-      system.log.debug("Starting actor with pid {}, and writing {} initial events", pid, initialPersistedEvents)
-      val persistentActor = system.actorOf(TestActor.props(pid))
-      if (initialEvents > 0) {
-        for (i <- 1 to initialEvents) {
-          persistentActor ! s"$pid-$i"
-          probe.expectMsg(s"$pid-$i-done")
-        }
-      }
-      (pid, persistentActor)
-    }
-    val (pid, persistentActor) = startPersistentActor(initialPersistedEvents)
-
-    // no guarantee we can immediately read our own writes
-    def readingOurOwnWrites[A](f: => A): A =
-      awaitAssert(f, readOurOwnWritesTimeout)
-  }
+class EventsByPersistenceIdSpec extends AbstractQuerySpec("EventsByPersistenceIdSpec") {
 
   "Couchbase query EventsByPersistenceId" must {
 
@@ -152,24 +85,35 @@ class EventsByPersistenceIdSpec
       }
     }
 
-    "not see new events after demand request" in new Setup {
+    "not see new events after the query was triggered" in new Setup {
       override def initialPersistedEvents = 3
 
-      val streamProbe =
-        readingOurOwnWrites {
-          val src = queries.currentEventsByPersistenceId(pid, 0L, Long.MaxValue)
-          src
-            .map(_.event)
-            .runWith(TestSink.probe[Any])
-            .request(2)
-            .expectNext(s"$pid-1", s"$pid-2")
-            .expectNoMessage(noMsgTimeout)
-        }
+      readingOurOwnWrites {
+        val evts = queries
+          .currentEventsByPersistenceId(pid, 0L, Long.MaxValue)
+          .runWith(Sink.seq)
+          .futureValue
+        evts should have size (3) // up to evt 3 is visible
+      }
 
+      val src = queries.currentEventsByPersistenceId(pid, 0L, Long.MaxValue)
+      val streamProbe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
+        .request(2)
+        .expectNext(s"$pid-1", s"$pid-2")
+        .expectNoMessage(noMsgTimeout)
+
+      // this event that is written after the query was triggered should not be included in the result
       persistentActor ! s"$pid-4"
       probe.expectMsg(s"$pid-4-done")
 
-      // FIXME this sometimes sees completion instead of that third element
+      // make sure we could observe the new event 4
+      readingOurOwnWrites {
+        val evts = queries.currentEventsByPersistenceId(pid, 4, 5).runWith(Sink.seq).futureValue
+        evts.map(_.event) should ===(List(s"$pid-4"))
+      }
+
       streamProbe
         .expectNoMessage(noMsgTimeout)
         .request(5)
@@ -178,7 +122,54 @@ class EventsByPersistenceIdSpec
 
     }
 
+    "not see new events after the query was triggered, across page size" in new Setup {
+      override def initialPersistedEvents = queries.settings.pageSize + 1
+
+      readingOurOwnWrites {
+        val evts = queries
+          .currentEventsByPersistenceId(pid, 0L, Long.MaxValue)
+          .runWith(Sink.seq)
+          .futureValue
+        evts should have size (initialPersistedEvents)
+      }
+
+      val src = queries.currentEventsByPersistenceId(pid, 0L, Long.MaxValue)
+      val notTheEntireFirstPage = queries.settings.pageSize - 1L
+      val streamProbe = src
+        .map(_.event)
+        .runWith(TestSink.probe[Any])
+        .request(notTheEntireFirstPage)
+        .expectNextN((1L to notTheEntireFirstPage).map(n => s"$pid-$n"))
+        .expectNoMessage(noMsgTimeout)
+
+      // this event that is written after the query was triggered should not be included in the result
+      val seqNrAfterInitial = initialPersistedEvents + 1L
+      persistentActor ! s"$pid-$seqNrAfterInitial"
+      probe.expectMsg(s"$pid-$seqNrAfterInitial-done")
+
+      // make sure we could observe the new event
+      readingOurOwnWrites {
+        val evts = queries
+          .currentEventsByPersistenceId(pid, initialPersistedEvents + 1, Long.MaxValue)
+          .runWith(Sink.seq)
+          .futureValue
+        evts.map(_.event) should ===(List(s"$pid-$seqNrAfterInitial"))
+      }
+
+      // here comes the weird part, the query stage should fill up one page and not do another query until
+      // we reach the end of it, but then that second query should see the new event and fail this test
+      // but it doesn't
+      streamProbe
+        .expectNoMessage(noMsgTimeout)
+        .request(5)
+        // last events that was in db when query was triggered
+        .expectNextN(((notTheEntireFirstPage + 1L) to initialPersistedEvents).map(n => s"$pid-$n"))
+        .expectComplete() // but not the event that was written after query is not seen
+
+    }
+
     "only deliver what requested if there is more in the buffer" in new Setup {
+      // FIXME what does this actually test? what buffer?
       override def initialPersistedEvents = 1000
       readingOurOwnWrites {
         val src = queries.currentEventsByPersistenceId(pid, 0L, Long.MaxValue)
@@ -224,48 +215,19 @@ class EventsByPersistenceIdSpec
       }
     }
 
-    // these talk about partitions, are they straight copy pasta from cassandra? We don't have partitions.
-    "produce correct sequence of events across multiple partitions" in new Setup {
-      override def initialPersistedEvents = 20
-      readingOurOwnWrites {
-        val src = queries.currentEventsByPersistenceId(pid, 0L, Long.MaxValue)
-        src
-          .map(_.event)
-          .runWith(TestSink.probe[Any])
-          .request(10)
-          .expectNextN((1 to 10).map(i => s"$pid-$i"))
-          .expectNoMessage(noMsgTimeout)
-          .request(11)
-          .expectNextN((11 to 20).map(i => s"$pid-$i"))
-          .expectComplete()
-      }
-    }
+    "find all events spanning multiple documents" in new Setup {
+      override def initialPersistedEvents = 0
 
-    "stop at last event in partition" in new Setup {
-      override def initialPersistedEvents = 15 // partition size is 15
-      val src = queries.currentEventsByPersistenceId(pid, 0L, Long.MaxValue)
-      readingOurOwnWrites {
-        src
-          .map(_.event)
-          .runWith(TestSink.probe[Any])
-          .request(100)
-          .expectNextN((1 to 15).map(i => s"$pid-$i"))
-          .expectComplete()
-      }
-    }
-
-    "find all events when PersistAll spans partition boundaries" in new Setup {
-      override def initialPersistedEvents = 10
-
-      // partition 0
-      persistentActor ! TestActor.PersistAll((11 to 15).map(i => s"$pid-$i"))
+      // doc 1
+      persistentActor ! TestActor.PersistAll((1 to 10).map(i => s"$pid-$i"))
       probe.expectMsg("PersistAll-done")
-      // partition 1
-      persistentActor ! TestActor.PersistAll((16 to 17).map(i => s"$pid-$i"))
+      // doc 2
+      persistentActor ! TestActor.PersistAll((11 to 25).map(i => s"$pid-$i"))
       probe.expectMsg("PersistAll-done")
-      // all these go into partition 2
-      persistentActor ! TestActor.PersistAll((18 to 31).map(i => s"$pid-$i"))
+      // doc 3
+      persistentActor ! TestActor.PersistAll((26 to 31).map(i => s"$pid-$i"))
       probe.expectMsg("PersistAll-done")
+      // doc 4
       persistentActor ! s"$pid-32"
       probe.expectMsg(s"$pid-32-done")
 
@@ -408,6 +370,7 @@ class EventsByPersistenceIdSpec
     }
 
     "only deliver what requested if there is more in the buffer" in new Setup {
+      // FIXME what does this actually test? what buffer?
       override def initialPersistedEvents = 1000
 
       val src = queries.eventsByPersistenceId(pid, 0L, Long.MaxValue)
@@ -433,7 +396,7 @@ class EventsByPersistenceIdSpec
     }
 
     "not produce anything if there aren't any events" in new Setup {
-      override def initialPersistedEvents = 1 // Database init.
+      override def initialPersistedEvents = 0 // Database init.
 
       val src = queries.eventsByPersistenceId(pid, 0L, Long.MaxValue)
 
@@ -484,80 +447,37 @@ class EventsByPersistenceIdSpec
       actor2Probe.cancel()
     }
 
-    "produce correct sequence of events across multiple partitions" in new Setup {
-      override def initialPersistedEvents = 15
+    "find all events across multiple documents" in new Setup {
+      override def initialPersistedEvents = 0
 
       val src = queries.eventsByPersistenceId(pid, 0L, Long.MaxValue)
 
-      val streamProbe = src
-        .map(_.event)
-        .runWith(TestSink.probe[Any])
-        .request(16)
-        .expectNextN((1 to 15).map(i => s"$pid-$i"))
-        .expectNoMessage(noMsgTimeout)
-
-      for (i <- 16 to 21) {
-        persistentActor ! s"$pid-$i"
-        probe.expectMsg(s"$pid-$i-done")
-      }
-
-      streamProbe
-        .request(6)
-        .expectNextN((16 to 21).map(i => s"$pid-$i"))
-
-      for (i <- 22 to 35) {
-        persistentActor ! s"$pid-$i"
-        probe.expectMsg(s"$pid-$i-done")
-      }
-
-      streamProbe
-        .request(10)
-        .expectNextN((22 to 31).map(i => s"$pid-$i"))
-
-      streamProbe.cancel()
-    }
-
-    "find all events when PersistAll spans partition boundaries" in new Setup {
-      override def initialPersistedEvents = 10
-
-      // partition 0
-      persistentActor ! TestActor.PersistAll((11 to 15).map(i => s"$pid-$i"))
+      // doc 1
+      persistentActor ! TestActor.PersistAll((1 to 10).map(i => s"$pid-$i"))
       probe.expectMsg("PersistAll-done")
-      // partition 1
-      persistentActor ! TestActor.PersistAll((16 to 17).map(i => s"$pid-$i"))
+      // doc 2
+      persistentActor ! TestActor.PersistAll((11 to 25).map(i => s"$pid-$i"))
       probe.expectMsg("PersistAll-done")
-      // all these go into partition 2
-      persistentActor ! TestActor.PersistAll((18 to 31).map(i => s"$pid-$i"))
+      // doc 3
+      persistentActor ! TestActor.PersistAll((26 to 31).map(i => s"$pid-$i"))
       probe.expectMsg("PersistAll-done")
+      // doc 4 with a single event
       persistentActor ! s"$pid-32"
       probe.expectMsg(s"$pid-32-done")
 
-      val src = queries.eventsByPersistenceId(pid, 0L, Long.MaxValue)
-      val streamProbe = src
-        .map(_.event)
-        .runWith(TestSink.probe[Any])
-        .request(10)
-        .expectNextN((1 to 10).map(i => s"$pid-$i"))
-        .expectNoMessage(noMsgTimeout)
-        .request(10)
-        .expectNextN((11 to 20).map(i => s"$pid-$i"))
-        .request(100)
-        .expectNextN((21 to 32).map(i => s"$pid-$i"))
-
-      // partition 2
-      persistentActor ! TestActor.PersistAll((32 to 42).map(i => s"$pid-$i"))
-      probe.expectMsg("PersistAll-done")
-      streamProbe.expectNextN((32 to 42).map(i => s"$pid-$i"))
-
-      // still partition 2
-      persistentActor ! s"$pid-43"
-      probe.expectMsg(s"$pid-43-done")
-      streamProbe.expectNext(s"$pid-43")
-
-      // partition 3
-      persistentActor ! TestActor.PersistAll((44 to 46).map(i => s"$pid-$i"))
-      probe.expectMsg("PersistAll-done")
-      streamProbe.expectNextN((44 to 46).map(i => s"$pid-$i"))
+      val streamProbe =
+        readingOurOwnWrites {
+          src
+            .map(_.event)
+            .runWith(TestSink.probe[Any])
+            .request(10)
+            .expectNextN((1 to 10).map(i => s"$pid-$i"))
+            .expectNoMessage(noMsgTimeout)
+            .request(10)
+            .expectNextN((11 to 20).map(i => s"$pid-$i"))
+            .request(100)
+            .expectNextN((21 to 32).map(i => s"$pid-$i"))
+        }
 
       streamProbe.cancel()
     }

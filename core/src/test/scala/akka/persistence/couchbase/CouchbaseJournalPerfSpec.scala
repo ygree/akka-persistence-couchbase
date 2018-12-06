@@ -6,6 +6,7 @@ package akka.persistence.couchbase
 
 import akka.persistence.CapabilityFlag
 import akka.persistence.journal.JournalPerfSpec
+import akka.testkit.WithLogCapturing
 import com.typesafe.config.ConfigFactory
 import org.scalatest.Ignore
 
@@ -15,9 +16,12 @@ import scala.concurrent.duration._
 // remove annotation to run locally
 @Ignore
 class CouchbaseJournalPerfSpec
-    extends JournalPerfSpec(ConfigFactory.load())
+    extends JournalPerfSpec(ConfigFactory.parseString("""
+          akka.loglevel = debug
+          akka.loggers = ["akka.testkit.SilenceAllTestEventListener"]
+        """).withFallback(ConfigFactory.load()))
     with CouchbaseBucketSetup
-    with SuppressedLogging {
+    with WithLogCapturing {
 
   override def awaitDurationMillis: Long = 20.seconds.toMillis
 
