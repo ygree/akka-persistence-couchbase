@@ -12,3 +12,7 @@ addSbtPlugin("com.dwijnand" % "sbt-dynver" % "3.0.0")
 addSbtPlugin("org.foundweekends" % "sbt-bintray" % "0.5.2")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-multi-jvm" % "0.4.0")
+
+// docs
+addSbtPlugin("com.lightbend.paradox" % "sbt-paradox" % "0.4.2")
+addSbtPlugin("com.lightbend.akka" % "sbt-paradox-akka" % "0.14")

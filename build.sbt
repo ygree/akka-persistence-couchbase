@@ -76,7 +76,7 @@ lazy val root = (project in file("."))
     publishTo := Some(Resolver.file("Unused transient repository", file("target/unusedrepo"))),
     skip in publish := true
   )
-  .aggregate((Seq(couchbaseClient, core) ++ lagomModules).map(Project.projectToRef): _*)
+  .aggregate((Seq(couchbaseClient, core, docs) ++ lagomModules).map(Project.projectToRef): _*)
 
 // TODO this should eventually be an alpakka module
 lazy val couchbaseClient = (project in file("couchbase-client"))
@@ -165,3 +165,25 @@ lazy val `lagom-persistence-couchbase-scaladsl` = (project in file("lagom-persis
   .enablePlugins(MultiJvmPlugin)
   .configs(MultiJvm)
   .settings(multiJvmTestSettings: _*)
+
+lazy val docs = project
+  .in(file("docs"))
+  .enablePlugins(AkkaParadoxPlugin)
+  .settings(common)
+  .settings(
+    name := "Alpakka Kafka",
+    skip in publish := true,
+    whitesourceIgnore := true,
+    paradoxGroups := Map("Language" -> Seq("Java", "Scala")),
+    paradoxProperties ++= Map(
+      "project.url" -> "https://doc.akka.io/docs/akka-stream-kafka/current/",
+      "akka.version" -> Dependencies.AkkaVersion,
+      "extref.akka-docs.base_url" -> s"https://doc.akka.io/docs/akka/${Dependencies.AkkaVersion}/%s",
+      "extref.java-docs.base_url" -> "https://docs.oracle.com/en/java/javase/11/%s",
+      "scaladoc.scala.base_url" -> s"https://www.scala-lang.org/api/current/",
+      "scaladoc.akka.base_url" -> s"https://doc.akka.io/api/akka/${Dependencies.AkkaVersion}",
+      "scaladoc.akka.kafka.base_url" -> s"https://doc.akka.io/api/akka-stream-kafka/${version.value}/",
+      "scaladoc.com.typesafe.config.base_url" -> s"https://lightbend.github.io/config/latest/api/"
+    ),
+    resolvers += Resolver.jcenterRepo
+  )
