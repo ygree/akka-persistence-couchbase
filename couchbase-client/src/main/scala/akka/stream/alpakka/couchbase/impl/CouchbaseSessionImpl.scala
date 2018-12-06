@@ -13,9 +13,10 @@ import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 import akka.stream.alpakka.couchbase.internal.CouchbaseSessionJavaAdapter
 import akka.stream.alpakka.couchbase.javadsl
 import akka.stream.scaladsl.Source
+import akka.util.ByteString
 import akka.{Done, NotUsed}
 import com.couchbase.client.java.bucket.AsyncBucketManager
-import com.couchbase.client.java.document.JsonDocument
+import com.couchbase.client.java.document.{ByteArrayDocument, Document, JsonDocument}
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
 import com.couchbase.client.java.{AsyncBucket, AsyncCluster}
@@ -39,10 +40,15 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: AsyncBucket, cl
 
   override def underlying: AsyncBucket = asyncBucket
 
-  def insert(document: JsonDocument): Future[JsonDocument] =
+  def insert(document: JsonDocument): Future[JsonDocument] = insertDoc(document)
+
+  def insertDoc[T <: Document[_]](document: T): Future[T] =
     singleObservableToFuture(asyncBucket.insert(document), document)
 
   def insert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument] =
+    insertDoc(document, writeSettings)
+
+  def insertDoc[T <: Document[_]](document: T, writeSettings: CouchbaseWriteSettings): Future[T] =
     singleObservableToFuture(
       asyncBucket.insert(document, writeSettings.persistTo, writeSettings.timeout.toMillis, TimeUnit.MILLISECONDS),
       document
@@ -51,13 +57,26 @@ final private[couchbase] class CouchbaseSessionImpl(asyncBucket: AsyncBucket, cl
   def get(id: String): Future[Option[JsonDocument]] =
     zeroOrOneObservableToFuture(asyncBucket.get(id))
 
+  def get[T <: Document[_]](id: String, documentClass: Class[T]): Future[Option[T]] =
+    zeroOrOneObservableToFuture(asyncBucket.get(id, documentClass))
+
   def get(id: String, timeout: FiniteDuration): Future[Option[JsonDocument]] =
     zeroOrOneObservableToFuture(asyncBucket.get(id, timeout.toMillis, TimeUnit.MILLISECONDS))
 
-  def upsert(document: JsonDocument): Future[JsonDocument] =
+  def get[T <: Document[_]](id: String,
+                            timeout: FiniteDuration,
+                            documentClass: Class[T]): scala.concurrent.Future[Option[T]] =
+    zeroOrOneObservableToFuture(asyncBucket.get(id, documentClass, timeout.toMillis, TimeUnit.MILLISECONDS))
+
+  def upsert(document: JsonDocument): Future[JsonDocument] = upsertDoc(document)
+
+  def upsertDoc[T <: Document[_]](document: T): Future[T] =
     singleObservableToFuture(asyncBucket.upsert(document), document.id)
 
   def upsert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument] =
+    upsertDoc(document)
+
+  def upsertDoc[T <: Document[_]](document: T, writeSettings: CouchbaseWriteSettings): Future[T] =
     singleObservableToFuture(asyncBucket.upsert(document,
                                                 writeSettings.persistTo,
                                                 writeSettings.replicateTo,

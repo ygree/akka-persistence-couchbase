@@ -16,7 +16,7 @@ import akka.stream.alpakka.couchbase.javadsl.CouchbaseSession
 import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => ScalaCouchbaseSession}
 import akka.stream.javadsl.Source
 import com.couchbase.client.java.AsyncBucket
-import com.couchbase.client.java.document.JsonDocument
+import com.couchbase.client.java.document.{ByteArrayDocument, Document, JsonDocument}
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
 
@@ -35,23 +35,41 @@ private[couchbase] final class CouchbaseSessionJavaAdapter(delegate: ScalaCouchb
 
   override def underlying: AsyncBucket = delegate.underlying
 
-  override def insert(document: JsonDocument): CompletionStage[JsonDocument] = delegate.insert(document).toJava
+  override def insert(document: JsonDocument): CompletionStage[JsonDocument] = delegate.insertDoc(document).toJava
+
+  override def insertDoc[T <: Document[_]](document: T): CompletionStage[T] = delegate.insertDoc(document).toJava
 
   override def insert(
       document: JsonDocument,
       writeSettings: CouchbaseWriteSettings
   ): CompletionStage[JsonDocument] = delegate.insert(document, writeSettings).toJava
 
+  override def insertDoc[T <: Document[_]](
+      document: T,
+      writeSettings: CouchbaseWriteSettings
+  ): CompletionStage[T] = delegate.insertDoc(document, writeSettings).toJava
+
   override def get(id: String): CompletionStage[Optional[JsonDocument]] =
     futureOptToJava(delegate.get(id))
+
+  override def get[T <: Document[_]](id: String, clazz: Class[T]): CompletionStage[Optional[T]] =
+    futureOptToJava(delegate.get(id, clazz))
 
   override def get(id: String, timeout: Duration): CompletionStage[Optional[JsonDocument]] =
     futureOptToJava(delegate.get(id, FiniteDuration.apply(timeout.toNanos, duration.NANOSECONDS)))
 
+  def get[T <: Document[_]](id: String, timeout: Duration, documentClass: Class[T]): CompletionStage[Optional[T]] =
+    futureOptToJava(delegate.get(id, FiniteDuration.apply(timeout.toNanos, duration.NANOSECONDS), documentClass))
+
   override def upsert(document: JsonDocument): CompletionStage[JsonDocument] = delegate.upsert(document).toJava
+
+  override def upsertDoc[T <: Document[_]](document: T): CompletionStage[T] = delegate.upsertDoc(document).toJava
 
   override def upsert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): CompletionStage[JsonDocument] =
     delegate.upsert(document, writeSettings).toJava
+
+  override def upsertDoc[T <: Document[_]](document: T, writeSettings: CouchbaseWriteSettings): CompletionStage[T] =
+    delegate.upsertDoc(document, writeSettings).toJava
 
   override def remove(id: String): CompletionStage[Done] = delegate.remove(id).toJava
 
@@ -87,4 +105,5 @@ private[couchbase] final class CouchbaseSessionJavaAdapter(delegate: ScalaCouchb
 
   private def futureOptToJava[T](future: Future[Option[T]]): CompletionStage[Optional[T]] =
     future.map(_.asJava)(ExecutionContexts.sameThreadExecutionContext).toJava
+
 }

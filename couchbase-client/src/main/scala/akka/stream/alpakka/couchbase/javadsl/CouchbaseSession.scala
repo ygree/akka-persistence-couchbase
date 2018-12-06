@@ -15,8 +15,8 @@ import akka.stream.alpakka.couchbase.scaladsl.{CouchbaseSession => ScalaDslCouch
 import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSettings}
 import akka.stream.javadsl.Source
 import akka.{Done, NotUsed}
-import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
+import com.couchbase.client.java.document.{Document, JsonDocument}
 import com.couchbase.client.java.query.{N1qlQuery, Statement}
 import com.couchbase.client.java.{AsyncBucket, Bucket}
 
@@ -56,21 +56,44 @@ abstract class CouchbaseSession {
   def asScala: ScalaDslCouchbaseSession
 
   /**
-   * Insert a document using the default write settings
+   * Insert a JSON document using the default write settings.
+   *
+   * For inserting other types of documents see `insertDoc`.
    *
    * @return A CompletionStage that completes with the written document when the write completes
    */
   def insert(document: JsonDocument): CompletionStage[JsonDocument]
 
   /**
-   * Insert a document
+   * Insert a document using the default write settings. Separate from `insert` to make the most common
+   * case smoother with the type inference
+   *
+   * @return A CompletionStage that completes with the written document when the write completes
+   */
+  def insertDoc[T <: Document[_]](document: T): CompletionStage[T]
+
+  /**
+   * Insert a JSON document using the given write settings.
+   *
+   * For inserting other types of documents see `insertDoc`.
    */
   def insert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): CompletionStage[JsonDocument]
+
+  /**
+   * Insert a document using the given write settings.
+   * Separate from `insert` to make the most common case smoother with the type inference
+   */
+  def insertDoc[T <: Document[_]](document: T, writeSettings: CouchbaseWriteSettings): CompletionStage[T]
 
   /**
    * @return A document if found or none if there is no document for the id
    */
   def get(id: String): CompletionStage[Optional[JsonDocument]]
+
+  /**
+   * @return A document if found or none if there is no document for the id
+   */
+  def get[T <: Document[_]](id: String, documentClass: Class[T]): CompletionStage[Optional[T]]
 
   /**
    * @param timeout fail the returned CompletionStage with a TimeoutException if it takes longer than this
@@ -79,18 +102,45 @@ abstract class CouchbaseSession {
   def get(id: String, timeout: Duration): CompletionStage[Optional[JsonDocument]]
 
   /**
+   * @param timeout fail the returned CompletionStage with a TimeoutException if it takes longer than this
+   * @return A document if found or none if there is no document for the id
+   */
+  def get[T <: Document[_]](id: String, timeout: Duration, documentClass: Class[T]): CompletionStage[Optional[T]]
+
+  /**
    * Upsert using the default write settings
+   *
+   * For inserting other types of documents see `upsertDoc`.
    *
    * @return a CompletionStage that completes when the upsert is done
    */
   def upsert(document: JsonDocument): CompletionStage[JsonDocument]
 
   /**
-   * FIXME what happens if the id is missing?
+   * Upsert using the default write settings.
+   * Separate from `upsert` to make the most common case smoother with the type inference
+   *
+   * @return a CompletionStage that completes when the upsert is done
+   */
+  def upsertDoc[T <: Document[_]](document: T): CompletionStage[T]
+
+  /**
+   * Upsert using the given write settings.
+   *
+   * For inserting other types of documents see `upsertDoc`.
    *
    * @return a CompletionStage that completes when the upsert is done
    */
   def upsert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): CompletionStage[JsonDocument]
+
+  /**
+   * Upsert using the given write settings.
+   *
+   * Separate from `upsert` to make the most common case smoother with the type inference
+   *
+   * @return a CompletionStage that completes when the upsert is done
+   */
+  def upsertDoc[T <: Document[_]](document: T, writeSettings: CouchbaseWriteSettings): CompletionStage[T]
 
   /**
    * Remove a document by id using the default write settings.

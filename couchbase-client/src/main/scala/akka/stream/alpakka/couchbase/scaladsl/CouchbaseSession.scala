@@ -12,8 +12,8 @@ import akka.stream.alpakka.couchbase.{CouchbaseSessionSettings, CouchbaseWriteSe
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
 import com.couchbase.client.java._
-import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.JsonObject
+import com.couchbase.client.java.document.{Document, JsonDocument}
 import com.couchbase.client.java.query._
 
 import scala.concurrent.Future
@@ -54,11 +54,6 @@ object CouchbaseSession {
 
 }
 
-// FIXME this is quite different from the Alpakka PR, to provide what felt natural for the journal, should we also provide corresponding Source/Flow/Sink factories
-// FIXME I dodged the type parameter for couchbase on purpose because I wanted to avoid hooking into their serialization infra and type inference mess
-// is there a need for it, or an alternative with something like ByteString for blobs that you can then deserialize in any way
-// you want?
-
 /**
  * Not for user extension
  */
@@ -70,21 +65,46 @@ trait CouchbaseSession {
   def asJava: JavaDslCouchbaseSession
 
   /**
-   * Insert a document using the default write settings
+   * Insert a JSON document using the default write settings.
+   *
+   * For inserting other types of documents see `insertDoc`.
    *
    * @return A future that completes with the written document when the write completes
    */
   def insert(document: JsonDocument): Future[JsonDocument]
 
   /**
-   * Insert a document
+   * Insert any type of document using the default write settings. Separate from `insert` to make the most common
+   * case smoother with the type inference
+   *
+   * @return A future that completes with the written document when the write completes
+   */
+  def insertDoc[T <: Document[_]](document: T): Future[T]
+
+  /**
+   * Insert a JSON document using the given write settings.
+   *
+   * For inserting other types of documents see `insertDoc`.
    */
   def insert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument]
+
+  /**
+   * Insert any type of document using the given write settings. Separate from `insert` to make the most common
+   * case smoother with the type inference
+   *
+   * @return A future that completes with the written document when the write completes
+   */
+  def insertDoc[T <: Document[_]](document: T, writeSettings: CouchbaseWriteSettings): Future[T]
 
   /**
    * @return A document if found or none if there is no document for the id
    */
   def get(id: String): Future[Option[JsonDocument]]
+
+  /**
+   * @return A document of the given type if found or none if there is no document for the id
+   */
+  def get[T <: Document[_]](id: String, documentClass: Class[T]): Future[Option[T]]
 
   /**
    * @param timeout fail the returned future with a TimeoutException if it takes longer than this
@@ -93,18 +113,45 @@ trait CouchbaseSession {
   def get(id: String, timeout: FiniteDuration): Future[Option[JsonDocument]]
 
   /**
-   * Upsert using the default write settings
+   * @return A document of the given type if found or none if there is no document for the id
+   */
+  def get[T <: Document[_]](id: String, timeout: FiniteDuration, documentClass: Class[T]): Future[Option[T]]
+
+  /**
+   * Upsert using the default write settings.
+   *
+   * For upserting other types of documents see `upsertDoc`.
    *
    * @return a future that completes when the upsert is done
    */
   def upsert(document: JsonDocument): Future[JsonDocument]
 
   /**
-   * FIXME what happens if the id is missing?
+   * Upsert using the default write settings.
+   *
+   * Separate from `upsert` to make the most common case smoother with the type inference
+   *
+   * @return a future that completes when the upsert is done
+   */
+  def upsertDoc[T <: Document[_]](document: T): Future[T]
+
+  /**
+   * Upsert using the given write settings
+   *
+   * For upserting other types of documents see `upsertDoc`.
    *
    * @return a future that completes when the upsert is done
    */
   def upsert(document: JsonDocument, writeSettings: CouchbaseWriteSettings): Future[JsonDocument]
+
+  /**
+   * Upsert using the given write settings
+   *
+   * Separate from `upsert` to make the most common case smoother with the type inference
+   *
+   * @return a future that completes when the upsert is done
+   */
+  def upsertDoc[T <: Document[_]](document: T, writeSettings: CouchbaseWriteSettings): Future[T]
 
   /**
    * Remove a document by id using the default write settings.

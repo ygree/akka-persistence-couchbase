@@ -13,7 +13,7 @@ import akka.stream.javadsl.Sink
 import akka.testkit.TestKit
 import com.couchbase.client.java.bucket.BucketType
 import com.couchbase.client.java.cluster.DefaultBucketSettings
-import com.couchbase.client.java.document.JsonDocument
+import com.couchbase.client.java.document.{ByteArrayDocument, JsonDocument}
 import com.couchbase.client.java.document.json.JsonObject
 import com.couchbase.client.java.query.Select.select
 import com.couchbase.client.java.query.consistency.ScanConsistency
@@ -125,6 +125,15 @@ class CouchbaseSessionSpec extends WordSpec with Matchers with ScalaFutures with
       val queryResult = session.streamedQuery(query).runWith(Sink.seq, materializer).toScala.futureValue
 
       queryResult should have size 1000
+    }
+
+    "write other document types than JSON" in {
+      val bytes = Array.tabulate(5)(_.toByte)
+      val doc = ByteArrayDocument.create("bin1", bytes)
+      val done = session.insertDoc(doc).toScala.futureValue
+      val readDoc: ByteArrayDocument =
+        session.get("bin1", classOf[ByteArrayDocument]).toScala.futureValue.get()
+      readDoc.content() should ===(bytes)
     }
 
     "upsert a missing document" in {
