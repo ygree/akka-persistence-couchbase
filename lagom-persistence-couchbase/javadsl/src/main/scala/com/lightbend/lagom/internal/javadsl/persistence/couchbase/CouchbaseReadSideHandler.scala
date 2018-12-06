@@ -39,6 +39,8 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
     couchbaseSession: CouchbaseSession,
     offsetStore: CouchbaseOffsetStore,
     handlers: Map[Class[_ <: Event], Handler[Event]],
+    globalPrepareCallback: CouchbaseSession => CompletionStage[Done],
+    prepareCallback: (CouchbaseSession, AggregateEventTag[Event]) => CompletionStage[Done],
     readProcessorId: String,
     dispatcher: String
 )(implicit ec: ExecutionContext)
@@ -60,8 +62,11 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
       }
       .toJava
 
+  override def globalPrepare(): CompletionStage[Done] = globalPrepareCallback.apply(couchbaseSession)
+
   override def prepare(tag: AggregateEventTag[Event]): CompletionStage[Offset] =
     (for {
+      _ <- prepareCallback.apply(couchbaseSession, tag).toScala
       dao <- offsetStore.prepare(readProcessorId, tag.tag)
     } yield {
       offsetDao = dao

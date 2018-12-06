@@ -13,7 +13,7 @@ import com.lightbend.lagom.internal.persistence.couchbase.CouchbaseOffsetStore
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
 import com.lightbend.lagom.scaladsl.persistence.couchbase.CouchbaseReadSide
 import com.lightbend.lagom.scaladsl.persistence.couchbase.CouchbaseReadSide.ReadSideHandlerBuilder
-import com.lightbend.lagom.scaladsl.persistence.{AggregateEvent, EventStreamElement}
+import com.lightbend.lagom.scaladsl.persistence.{AggregateEvent, AggregateEventTag, EventStreamElement}
 
 import scala.concurrent.Future
 import scala.reflect.ClassTag
@@ -31,7 +31,25 @@ private[lagom] final class CouchbaseReadSideImpl(system: ActorSystem,
 
   override def builder[Event <: AggregateEvent[Event]](readSideId: String): ReadSideHandlerBuilder[Event] =
     new ReadSideHandlerBuilder[Event] {
+      var globalPrepare: CouchbaseSession => Future[Done] =
+        (_) => Future.successful(Done)
+
+      var prepare: (CouchbaseSession, AggregateEventTag[Event]) => Future[Done] =
+        (_, _) => Future.successful(Done)
+
       private var handlers = Map.empty[Class[_ <: Event], Handler[Event]]
+
+      override def setGlobalPrepare(callback: CouchbaseSession => Future[Done]): ReadSideHandlerBuilder[Event] = {
+        globalPrepare = callback
+        this
+      }
+
+      override def setPrepare(
+          callback: (CouchbaseSession, AggregateEventTag[Event]) => Future[Done]
+      ): ReadSideHandlerBuilder[Event] = {
+        prepare = callback
+        this
+      }
 
       override def setEventHandler[E <: Event: ClassTag](
           handler: (CouchbaseSession, EventStreamElement[E]) => Future[Done]
@@ -42,6 +60,12 @@ private[lagom] final class CouchbaseReadSideImpl(system: ActorSystem,
       }
 
       override def build(): ReadSideHandler[Event] =
-        new CouchbaseReadSideHandler[Event](couchbaseSession, offsetStore, handlers, readSideId, dispatcher)
+        new CouchbaseReadSideHandler[Event](couchbaseSession,
+                                            offsetStore,
+                                            handlers,
+                                            globalPrepare,
+                                            prepare,
+                                            readSideId,
+                                            dispatcher)
     }
 }

@@ -33,6 +33,8 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
     couchbase: CouchbaseSession,
     offsetStore: CouchbaseOffsetStore,
     handlers: Map[Class[_ <: Event], CouchbaseReadSideHandler.Handler[Event]],
+    globalPrepareCallback: CouchbaseSession => Future[Done],
+    prepareCallback: (CouchbaseSession, AggregateEventTag[Event]) => Future[Done],
     readProcessorId: String,
     dispatcher: String
 )(implicit ec: ExecutionContext)
@@ -50,8 +52,11 @@ private[couchbase] final class CouchbaseReadSideHandler[Event <: AggregateEvent[
       .apply(couchbase, element)
       .flatMap(_ => offsetDao.bindSaveOffset(element.offset).execute(couchbase, ec))
 
+  override def globalPrepare(): Future[Done] = globalPrepareCallback(couchbase)
+
   override def prepare(tag: AggregateEventTag[Event]): Future[Offset] =
     for {
+      _ <- prepareCallback.apply(couchbase, tag)
       dao <- offsetStore.prepare(readProcessorId, tag.tag)
     } yield {
       offsetDao = dao

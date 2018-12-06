@@ -3,12 +3,14 @@
  */
 
 package com.lightbend.lagom.scaladsl.persistence.couchbase
+
 import com.lightbend.lagom.scaladsl.persistence.ReadSideProcessor.ReadSideHandler
-import com.lightbend.lagom.scaladsl.persistence.{AggregateEvent, EventStreamElement}
+import com.lightbend.lagom.scaladsl.persistence.{AggregateEvent, AggregateEventTag, EventStreamElement}
 
 import scala.concurrent.Future
 import scala.reflect.ClassTag
 import akka.Done
+import akka.persistence.query.{NoOffset, Offset}
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
 
 /**
@@ -24,12 +26,30 @@ object CouchbaseReadSide {
   trait ReadSideHandlerBuilder[Event <: AggregateEvent[Event]] {
 
     /**
+     * Set a global prepare callback.
+     *
+     * @param callback The callback.
+     * @return This builder for fluent invocation.
+     * @see ReadSideHandler#globalPrepare()
+     */
+    def setGlobalPrepare(callback: CouchbaseSession => Future[Done]): ReadSideHandlerBuilder[Event]
+
+    /**
+     * Set a prepare callback.
+     *
+     * @param callback The callback.
+     * @return This builder for fluent invocation.
+     * @see ReadSideHandler#prepare(AggregateEventTag)
+     */
+    def setPrepare(
+        callback: (CouchbaseSession, AggregateEventTag[Event]) => Future[Done]
+    ): ReadSideHandlerBuilder[Event]
+
+    /**
      * Define the event handler that will be used for events of a given class.
      *
-     * This variant allows for offsets to be consumed as well as their events.
-     *
-     * @tparam E The event type to handle.
      * @param handler The function to handle the events.
+     * @tparam E The event type to handle.
      * @return This builder for fluent invocation
      */
     def setEventHandler[E <: Event: ClassTag](

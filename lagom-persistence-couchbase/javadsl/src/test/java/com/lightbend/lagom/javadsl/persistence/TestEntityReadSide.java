@@ -12,6 +12,7 @@ import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseReadSide;
 import org.pcollections.PSequence;
 
 import javax.inject.Inject;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 public class TestEntityReadSide {
@@ -35,6 +36,7 @@ public class TestEntityReadSide {
 
   public static class TestEntityReadSideProcessor extends ReadSideProcessor<TestEntity.Evt> {
     private final CouchbaseReadSide readSide;
+    private volatile boolean prepared;
 
     @Inject
     public TestEntityReadSideProcessor(CouchbaseReadSide readSide) {
@@ -44,12 +46,20 @@ public class TestEntityReadSide {
     @Override
     public ReadSideProcessor.ReadSideHandler<TestEntity.Evt> buildHandler() {
       return readSide.<TestEntity.Evt>builder("testoffsets")
+          .setGlobalPrepare(session -> CompletableFuture.completedFuture(Done.getInstance()))
+          .setPrepare((session, tag) -> CompletableFuture.supplyAsync(() -> {
+            prepared = true;
+            return Done.getInstance();
+          }))
           .setEventHandler(TestEntity.Appended.class, this::updateCount)
           .build();
     }
 
-    private CompletionStage<Done> updateCount(CouchbaseSession session, TestEntity.Appended event) {
+    private CompletionStage<Done> updateCount(CouchbaseSession session, TestEntity.Appended event, Offset offset) {
       return getCount(session, event.getEntityId()).thenComposeAsync(count -> {
+        if (!prepared) {
+          throw new IllegalStateException("Prepare handler hasn't been called");
+        }
         JsonObject content = JsonObject.create().put("count", count + 1);
         return session
             .upsert(JsonDocument.create("count-" + event.getEntityId(), content))

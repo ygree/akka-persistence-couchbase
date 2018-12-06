@@ -18,12 +18,17 @@ object TestEntityReadSide {
   class TestEntityReadSideProcessor(system: ActorSystem, readSide: CouchbaseReadSide)
       extends ReadSideProcessor[TestEntity.Evt] {
 
+    @volatile private var prepared = false
+
     def buildHandler(): ReadSideHandler[TestEntity.Evt] = {
       import system.dispatcher
 
       def updateCount(cs: CouchbaseSession, element: EventStreamElement[TestEntity.Appended]): Future[Done] =
         getCount(cs, element.entityId)
           .flatMap((count: Long) => {
+            if (!prepared) {
+              throw new IllegalStateException("Prepare handler hasn't been called")
+            }
             cs.upsert(
               JsonDocument.create(s"count-${element.entityId}", JsonObject.create().put("count", count + 1))
             )
@@ -32,6 +37,14 @@ object TestEntityReadSide {
 
       readSide
         .builder[TestEntity.Evt]("testoffsets")
+        .setGlobalPrepare(session => Future.successful(Done))
+        .setPrepare(
+          (session, tag) =>
+            Future {
+              prepared = true
+              Done
+          }
+        )
         .setEventHandler[TestEntity.Appended](updateCount)
         .build()
     }
