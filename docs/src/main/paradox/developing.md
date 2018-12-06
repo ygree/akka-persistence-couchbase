@@ -9,8 +9,7 @@ or by suggesting changes to the code. Please refer to our [contributing instruct
 
 Build and start a single node Couchbase cluster in docker:
 ```bash
-docker-compose -f docker/couchbase-1-node/docker-compose.yml build && \ 
-  docker-compose -f docker/couchbase-1-node/docker-compose.yml up
+docker-compose -f docker/couchbase-1-node/docker-compose.yml up --build
 ```
 
 Stopping the Couchbase docker container by:
@@ -24,11 +23,15 @@ Couchbase dashboard is available at `http://localhost:8091` with username `admin
 
 This requires access to the separate cluster container nodes, which does work on Linux but not on MacOS or Windows.
 
-Starting the nodes:
+Starting a three node Couchbase cluster in docker:
 
 ```bash
-docker-compose -f docker/couchbase-3-node/docker-compose.yml build && \
-  docker-compose -f docker/couchbase-3-node/docker-compose.yml up
+docker-compose -f docker/couchbase-3-node/docker-compose.yml up --build
+```
+
+Stopping the Couchbase docker container by:
+```bash
+docker-compose -f docker/couchbase-3-node/docker-compose.yml down
 ```
 
 

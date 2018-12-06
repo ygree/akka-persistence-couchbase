@@ -3,8 +3,8 @@
 ## Dependencies
 
 @@dependency [Maven,sbt,Gradle] {
-  group=com.typesafe.akka
-  artifact=akka-stream-kafka_$scala.binary.version$
+  group=com.lightbend.akka
+  artifact=akka-persistence-couchbase_$scala.binary.version$
   version=$project.version$
 }
 
@@ -27,7 +27,9 @@ The following global secondary indexes needs to be created for the plugins to fu
 The journal requires the indexes
 
 ```
-CREATE INDEX `persistence-ids` on `akka` (`persistence_id`) WHERE `type` = "journal_message"
+CREATE INDEX `persistence-ids` on `akka` (`persistence_id`) 
+  WHERE `type` = "journal_message"
+  
 CREATE INDEX `sequence-nrs` on `akka` 
   (DISTINCT ARRAY m.sequence_nr FOR m in messages END) 
   WHERE `type` = "journal_message"
@@ -39,6 +41,7 @@ If you will be using the query side with event-for-tags the following will also 
 CREATE INDEX `tags` ON `akka` 
   (ALL ARRAY m.tags FOR m IN messages END)
   WHERE `type` = "journal_message"
+  
 CREATE INDEX `tags-ordering` ON `akka` 
   (DISTINCT ARRAY m.ordering FOR m IN messages END)
   WHERE `type` = "journal_message"
@@ -47,7 +50,8 @@ CREATE INDEX `tags-ordering` ON `akka`
 The snapshot plugin requires an additional index:
 
 ```
-CREATE INDEX `snapshots` ON `akka` (persistence_id, sequence_nr) WHERE akka.type = "snapshot"
+CREATE INDEX `snapshots` ON `akka` (persistence_id, sequence_nr) 
+  WHERE akka.type = "snapshot"
 ```
 
 Note that the specific aliases used (`m`) for the arrays must not be changed or the indexes will not actually be used.
