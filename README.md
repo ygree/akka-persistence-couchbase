@@ -3,6 +3,8 @@
 Replicated [Akka Persistence](https://doc.akka.io/docs/akka/current/scala/persistence.html) journal and snapshot 
 store for [Couchbase](https://www.couchbase.com).
 
+Documentation can be found at [https://doc.akka.io/docs/akka-persistence-coucbase/current]
+
 Note that this project is in early access, see section below for details about what is more or less complete and
 what is in progress.
 
@@ -17,9 +19,9 @@ The plugins are available in an early access mode, we will publish milestones as
 Current state:
 
 *Write Journal* implemented with minor details in progress, should work but not production ready
-*Snapshot Store* POC implementation in place, not hardened, expect changes
-*Read Journal*  implemented with minor details in progress, should work but not production ready
-*Lagom support* POC implementation in place, not hardened, expect changes
+*Snapshot Store* should work but not production ready
+*Read Journal* implemented with minor details in progress, should work but not production ready
+*Lagom support* should work but not production ready
 
 
 ### Caveats

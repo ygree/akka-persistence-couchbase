@@ -14,3 +14,5 @@
  1. Login to [Bintray](https://bintray.com/akka/maven/akka-persistence-couchbase) and sync artifacts to Maven Central:
      * Go to the 'Maven Central' tab and use your sonatype credentials. This can take a long time (you can check https://oss.sonatype.org/#stagingRepositories for progress)
  1. Close the milestone for this release and start a new one.
+ 1. Build docs `docs/paradox` and copy to a directory with the version of the plugin on akka.io, link `current` to that directory
+    (follow https://github.com/akka/alpakka-kafka/blob/master/docs/release-train-issue-template.md#publish-docs-to-gustav)
