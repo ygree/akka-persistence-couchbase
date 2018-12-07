@@ -1,4 +1,4 @@
-package docs.home.persistence;
+package jdocs.home.persistence;
 
 import java.util.Objects;
 

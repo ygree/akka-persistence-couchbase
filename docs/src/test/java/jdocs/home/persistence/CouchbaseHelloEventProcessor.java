@@ -1,4 +1,4 @@
-package docs.home.persistence;
+package jdocs.home.persistence;
 
 //#imports
 import akka.Done;
@@ -9,11 +9,14 @@ import com.lightbend.lagom.javadsl.persistence.AggregateEventTag;
 import com.lightbend.lagom.javadsl.persistence.ReadSideProcessor;
 import com.lightbend.lagom.javadsl.persistence.couchbase.CouchbaseReadSide;
 import org.pcollections.PSequence;
-import rx.Observable;
 
 import javax.inject.Inject;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+
+import static akka.Done.done;
+
+
 //#imports
 
 public class CouchbaseHelloEventProcessor {
@@ -108,23 +111,19 @@ public class CouchbaseHelloEventProcessor {
 
     //#greeting-message-changed
     private CompletionStage<Done> processGreetingMessageChanged(CouchbaseSession session, HelloEvent.GreetingMessageChanged evt) {
-      return fromSingleObservable(session.underlying()
-          .mutateIn(DOC_ID)
-          .upsert(evt.name, evt.message)
-          .execute())
-          .thenApply(v -> Done.getInstance());
+      // FIXME support granular upsert in session API to get an atomic upsert here #136
+      return session.get(DOC_ID).thenCompose((maybeJson) -> {
+        final JsonObject json;
+        if (maybeJson.isPresent()) {
+          json = maybeJson.get().content();
+        } else {
+          json = JsonObject.create();
+        }
+        return session.upsert(JsonDocument.create(DOC_ID, json.put(evt.name, evt.message)));
+      }).thenApply(doc -> done());
     }
     //#greeting-message-changed
 
-    //#from-single-observable
-    private <T> CompletableFuture<T> fromSingleObservable(Observable<T> observable) {
-      final CompletableFuture<T> future = new CompletableFuture<>();
-      observable
-          .single()
-          .subscribe(future::complete, future::completeExceptionally);
-      return future;
-    }
-    //#from-single-observable
   }
 
 }

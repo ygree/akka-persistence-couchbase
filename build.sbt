@@ -187,3 +187,4 @@ lazy val docs = project
     ),
     resolvers += Resolver.jcenterRepo
   )
+  .dependsOn(`lagom-persistence-couchbase-scaladsl`, `lagom-persistence-couchbase-javadsl`)

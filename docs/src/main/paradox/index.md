@@ -12,8 +12,9 @@ a backend for Akka Persistence and Akka Persistence Query.
 * [Query Plugin](read-journal.md)
 * [Snapshot Plugin](snapshots.md)
 * [Serialization](serialization.md)
+* [Lagom Persistent Entities](lagom-persistent-entity.md)
+* [Lagom Read-Side support](lagom-read-side.md)
 * [Developing the plugin](developing.md)
-* [Lagom (Java API)](lagom/Lagom.md)
 
 @@@
 
