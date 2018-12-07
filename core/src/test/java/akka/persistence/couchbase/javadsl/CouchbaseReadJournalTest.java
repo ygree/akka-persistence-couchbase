@@ -62,7 +62,7 @@ public class CouchbaseReadJournalTest {
 
   static ActorSystem system;
   static ActorMaterializer mat;
-  static CouchbaseReadJournal javaQueries;
+  static CouchbaseReadJournal queries;
   static CouchbaseClusterConnection clusterConnection;
   static CouchbaseSession couchbaseSession;
 
@@ -71,8 +71,10 @@ public class CouchbaseReadJournalTest {
     system = ActorSystem.create("CouchbaseReadJournalTest", config);
     mat = ActorMaterializer.create(system);
 
-    javaQueries = PersistenceQuery.get(system)
+    // #read-journal-access
+    queries = PersistenceQuery.get(system)
         .getReadJournalFor(CouchbaseReadJournal.class, CouchbaseReadJournal.Identifier());
+    // #read-journal-access
 
     clusterConnection = CouchbaseClusterConnection.connect()
         .cleanUp();
@@ -82,7 +84,7 @@ public class CouchbaseReadJournalTest {
 
   @AfterClass
   public static void teardown() {
-    javaQueries = null;
+    queries = null;
 
     mat.shutdown();
     mat = null;
@@ -105,7 +107,7 @@ public class CouchbaseReadJournalTest {
       expectMsg("a-1-done");
 
       awaitAssert(() -> {
-        Source<String, NotUsed> src = javaQueries
+        Source<String, NotUsed> src = queries
             .eventsByPersistenceId("a", 0L, Long.MAX_VALUE)
             .map(EventEnvelope::persistenceId);
 
@@ -125,7 +127,7 @@ public class CouchbaseReadJournalTest {
       expectMsg("b-1-done");
 
       awaitAssert(() -> {
-        Source<String, NotUsed> src = javaQueries
+        Source<String, NotUsed> src = queries
             .currentEventsByPersistenceId("b", 0L, Long.MAX_VALUE)
             .map(EventEnvelope::persistenceId);
 
@@ -140,7 +142,7 @@ public class CouchbaseReadJournalTest {
   @Test
   public void test03_StartEventsByTagQuery() {
     new TestKit(system) {{
-      Source<String, NotUsed> src = javaQueries
+      Source<String, NotUsed> src = queries
           .eventsByTag("a", Offset.noOffset())
           .map(EventEnvelope::persistenceId);
 
@@ -157,7 +159,7 @@ public class CouchbaseReadJournalTest {
   @Test
   public void test04_startCurrentEventsByTagQuery() {
     new TestKit(system) {{
-      Source<String, NotUsed> src = javaQueries
+      Source<String, NotUsed> src = queries
           .currentEventsByTag("a", Offset.noOffset())
           .map(EventEnvelope::persistenceId);
 
