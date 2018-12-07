@@ -4,6 +4,7 @@
 
 package akka.stream.alpakka.couchbase.javadsl;
 
+import com.couchbase.client.core.CouchbaseException;
 import com.couchbase.client.java.Bucket;
 import com.couchbase.client.java.CouchbaseCluster;
 import com.couchbase.client.java.bucket.BucketType;
@@ -18,6 +19,7 @@ import org.junit.Test;
 
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -30,8 +32,23 @@ public class CouchbaseSessionTest {
 
   static final String bucketName = "couchbaseSessionTest";
 
+  private static void cleanUpBucket(int triesLeft) throws Exception {
+    try {
+      bucket.bucketManager().createN1qlPrimaryIndex(true, false);
+      bucket.query(N1qlQuery.simple("delete from " + bucketName));
+      bucket.bucketManager().dropN1qlPrimaryIndex(true);
+    } catch (CouchbaseException ex) {
+      if (triesLeft > 0) {
+        // we get these sometimes because bucket hasn't been created yet when we try to create the index,
+        // if so, wait a bit and retry
+        Thread.sleep(3000);
+        cleanUpBucket(triesLeft - 1);
+      }
+    }
+  }
+
   @BeforeClass
-  public static void setup() {
+  public static void setup() throws Exception {
     couchbaseCluster = CouchbaseCluster.create()
         .authenticate("admin", "admin1");
 
@@ -43,36 +60,19 @@ public class CouchbaseSessionTest {
           .build();
       couchbaseCluster.clusterManager().insertBucket(bucketSettings);
     }
-
     bucket = couchbaseCluster.openBucket(bucketName);
-    bucket.bucketManager().createN1qlPrimaryIndex(true, false);
-    bucket.query(N1qlQuery.simple("delete from " + bucketName));
-    bucket.bucketManager().dropN1qlPrimaryIndex(true);
 
+    cleanUpBucket(3);
     session = CouchbaseSession.create(bucket);
   }
 
   @AfterClass
   public static void teardown() {
-    try {
-      session.close();
-    } catch (Throwable t) {
-      t.printStackTrace();
-    }
-    try {
-      bucket.close();
-    } catch (Throwable t) {
-      t.printStackTrace();
-    }
-    try {
+    if (session != null) session.close();
+    if (bucket != null) bucket.close();
+    if (couchbaseCluster != null) {
       couchbaseCluster.clusterManager().removeBucket(bucketName);
-    } catch (Throwable t) {
-      t.printStackTrace();
-    }
-    try {
       couchbaseCluster.disconnect();
-    } catch (Throwable t) {
-      t.printStackTrace();
     }
   }
 
