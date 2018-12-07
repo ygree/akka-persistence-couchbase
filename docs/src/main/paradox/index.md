@@ -13,6 +13,7 @@ a backend for Akka Persistence and Akka Persistence Query.
 * [Snapshot Plugin](snapshots.md)
 * [Serialization](serialization.md)
 * [Developing the plugin](developing.md)
+* [Lagom (Java API)](lagom/Lagom.md)
 
 @@@
 
