@@ -120,7 +120,8 @@ private[couchbase] object CouchbaseReadJournalSettings {
 @InternalApi
 private[couchbase] final case class CouchbaseSnapshotSettings(sessionSettings: CouchbaseSessionSettings,
                                                               bucket: String,
-                                                              writeSettings: CouchbaseWriteSettings)
+                                                              writeSettings: CouchbaseWriteSettings,
+                                                              warnAboutMissingIndexes: Boolean)
 
 /**
  * INTERNAL API
@@ -133,10 +134,12 @@ private[couchbase] object CouchbaseSnapshotSettings {
     val bucket = config.getString("snapshot.bucket")
     val sessionSettings = CouchbaseSessionSettings(clientConfig)
 
+    val warnAboutMissingIndexes = config.getBoolean("write.warn-about-missing-indexes")
+
     // pick these up from the write journal config - it doesn't make sense to allow different
     // settings for events and snapshots
     val writeSettings = CouchbaseJournalSettings.parseWriteSettings(config)
 
-    CouchbaseSnapshotSettings(sessionSettings, bucket, writeSettings)
+    CouchbaseSnapshotSettings(sessionSettings, bucket, writeSettings, warnAboutMissingIndexes)
   }
 }

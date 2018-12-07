@@ -11,8 +11,10 @@ import akka.persistence.couchbase.internal.{AsyncCouchbaseSession, CouchbaseSche
 import akka.persistence.snapshot.SnapshotStore
 import akka.persistence.{SelectedSnapshot, SnapshotMetadata, SnapshotSelectionCriteria}
 import akka.serialization.SerializationExtension
+import akka.stream.ActorMaterializer
 import akka.stream.alpakka.couchbase.CouchbaseSessionRegistry
 import akka.stream.alpakka.couchbase.scaladsl.CouchbaseSession
+import akka.stream.scaladsl.Sink
 import com.couchbase.client.java.document.JsonDocument
 import com.couchbase.client.java.document.json.{JsonArray, JsonObject}
 import com.couchbase.client.java.error.DocumentDoesNotExistException
@@ -44,6 +46,21 @@ final class CouchbaseSnapshotStore(cfg: Config, configPath: String) extends Snap
   asyncSession.failed.foreach { ex =>
     log.error(ex, "Failed to connect to couchbase")
     context.stop(self)
+  }
+  if (settings.warnAboutMissingIndexes) {
+    implicit val materializer = ActorMaterializer()
+    for {
+      session <- asyncSession
+      indexes <- session.listIndexes().runWith(Sink.seq)
+    } {
+      materializer.shutdown() // not needed after used
+      val indexNames = indexes.map(_.name()).toSet
+      if (!indexNames("snapshots"))
+        log.error(
+          "Missing the [{}] index, the snapshot plugin will not work without it, se plugin documentation for details",
+          "snapshots"
+        )
+    }
   }
 
   private val queryParams = N1qlParams.build().consistency(ScanConsistency.STATEMENT_PLUS)
