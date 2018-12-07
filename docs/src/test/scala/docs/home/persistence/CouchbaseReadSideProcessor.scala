@@ -32,7 +32,7 @@ object CouchbaseReadSideProcessorInitial {
 
 object CouchbaseReadSideProcessorTwo {
 
-  class HelloEventProcessor(readSide: ReadSide with CouchbaseReadSide)(implicit executionContext: ExecutionContext)
+  class HelloEventProcessor(readSide: CouchbaseReadSide)(implicit executionContext: ExecutionContext)
       extends ReadSideProcessor[HelloEvent] {
 
     //#tag

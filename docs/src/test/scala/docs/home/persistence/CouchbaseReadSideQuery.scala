@@ -14,7 +14,6 @@ import play.api.libs.json.{Format, Json}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
-
 // #imports
 
 object CouchbaseReadSideQuery {
@@ -38,11 +37,12 @@ object CouchbaseReadSideQuery {
   }
 
   // #service-impl
-  // FIXME both ReadSide and CouchbaseReadSide what is wrong here?
-  class GreetingServiceImpl(readSide: CouchbaseReadSide with ReadSide, session: CouchbaseSession)(
+  //#register-event-processor
+  class GreetingServiceImpl(couchbaseReadSide: CouchbaseReadSide, readSideRegistry: ReadSide, session: CouchbaseSession)(
       implicit ec: ExecutionContext
   ) extends GreetingService {
-    readSide.register[HelloEvent](new HelloEventProcessor(readSide))
+    readSideRegistry.register[HelloEvent](new HelloEventProcessor(couchbaseReadSide))
+    //#register-event-processor
     override def userGreetings() =
       ServiceCall { request =>
         session.get("users-actual-greetings").map {
@@ -54,8 +54,4 @@ object CouchbaseReadSideQuery {
       }
   }
   // #service-impl
-
-  //#register-event-processor
-  ???
-  //#register-event-processor
 }
